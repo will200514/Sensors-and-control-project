@@ -1,0 +1,41 @@
+
+import mujoco
+import mujoco.viewer
+import time
+
+# Create a basic string-based MJCF model (a falling sphere)
+xml = """
+<mujoco>
+  <worldbody>
+    <light diffuse=".5 .5 .5" pos="0 0 3" dir="0 0 -1"/>
+    <geom type="plane" size="1 1 0.1" rgba=".9 0 0 1"/>
+    <body pos="0 0 1">
+      <joint type="free"/>
+      <geom type="sphere" size="0.1" rgba="0 .9 0 1"/>
+    </body>
+  </worldbody>
+</mujoco>
+"""
+
+# Load the model and data
+model = mujoco.MjModel.from_xml_string(xml)
+data = mujoco.MjData(model)
+
+# Launch the passive viewer
+with mujoco.viewer.launch_passive(model, data) as viewer:
+    start = time.time()
+
+    while viewer.is_running() and time.time() - start < 10:
+        step_start = time.time()
+
+        # Step the physics simulation
+        mujoco.mj_step(model, data)
+
+        # Sync physical changes to the viewer
+        viewer.sync()
+
+        # Match real-time simulation speed
+        time_until_next_step = model.opt.timestep - (time.time() - step_start)
+
+        if time_until_next_step > 0:
+            time.sleep(time_until_next_step)
