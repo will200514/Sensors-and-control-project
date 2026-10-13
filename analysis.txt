@@ -1,0 +1,22 @@
+CONTROLLABILITY of the error model (A(v_r, w_r), B)  [rank must be 3]
+   v_r   w_r  rank   sigma_min(ctrb)
+  0.18  0.00     3            0.1800
+  0.18  0.50     3            0.5314
+  0.04  0.00     3            0.0400
+  0.01  0.00     3            0.0100
+  0.00  0.50     3            0.5000
+  0.00  0.00     2            0.0000
+-> at v_r = 0 and w_r = 0 the lateral error e_y cannot be corrected (rank 2): a robot must move to fix a sideways offset.
+   With v_r = 0, w_r != 0 the model is controllable, but only because the reference itself is rotating.
+
+OBSERVABILITY of the EKF linearisation over a 1 s window (20 steps), pose (1, 1, 0)
+case                             rank  singular values
+no marker visible, moving           0  [0. 0. 0.]
+1 marker ahead, stationary          2  [5.1546 4.4721 0.    ]
+1 marker ahead, moving              3  [5.3184 4.4721 0.0432]
+1 marker off-axis, moving           3  [4.9909 4.3927 0.0481]
+2 markers, stationary               3  [7.1149 4.9689 4.0361]
+2 markers, moving                   3  [7.3142 4.9681 3.9297]
+-> one marker gives range+bearing (2 equations) for 3 states: not instantaneously observable. Heading is recovered
+   only through motion (position-heading coupling in F) or a second marker. With no marker, only the predicted
+   covariance exists: P grows without bound (see dead-reckoning error in results/).
