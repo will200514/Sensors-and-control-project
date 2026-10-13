@@ -4,7 +4,12 @@ Every number here is either a TurtleBot3 Burger datasheet value, a sensor assump
 tuning choice. Tuning choices are justified in README.md.
 """
 from dataclasses import dataclass
+from pathlib import Path
 import numpy as np
+
+# Output folder, anchored to this project (works whatever folder you run from)
+RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
+RESULTS_DIR.mkdir(exist_ok=True)
 
 # ---- timing -------------------------------------------------------------------------
 DT = 0.05            # control / physics step [s] (20 Hz)

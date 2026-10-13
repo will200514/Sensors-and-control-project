@@ -34,4 +34,4 @@ for name, v, w, mk in cases:
 out.append("-> one marker gives range+bearing (2 equations) for 3 states: not instantaneously observable. Heading is recovered\n"
            "   only through motion (position-heading coupling in F) or a second marker. With no marker, only the predicted\n"
            "   covariance exists: P grows without bound (see dead-reckoning error in results/).")
-open("results/analysis.txt", "w").write("\n".join(out)); print("\n".join(out))
+open(C.RESULTS_DIR / "analysis.txt", "w").write("\n".join(out)); print("\n".join(out))

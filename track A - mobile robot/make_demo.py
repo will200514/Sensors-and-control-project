@@ -42,5 +42,5 @@ def draw(i):
     return lt, le
 
 anim = animation.FuncAnimation(fig, draw, frames=len(T["t"]) // step, interval=60)
-anim.save(f"results/demo_seed{a.seed}.gif", writer=animation.PillowWriter(fps=15))
+anim.save(C.RESULTS_DIR / f"demo_seed{a.seed}.gif", writer=animation.PillowWriter(fps=15))
 print("saved results/demo_seed%d.gif" % a.seed)

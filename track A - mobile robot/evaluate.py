@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from dataclasses import replace
 from src.mission import run_trial
 from src.config import Cfg
+from src import config as C
 
 SEEDS = range(1000, 1050)      # 50 held-out trials for the baseline
 ABL_SEEDS = range(1000, 1030)  # 30 trials per ablation (same scenarios as the baseline's first 30)
@@ -85,7 +86,7 @@ if __name__ == "__main__":
         R = run(f"LQR R x{rs}", replace(base, lqr_r_scale=rs), ABL_SEEDS)
         lqr_rows.append((rs, summarise(f"LQR R x{rs}", R)))
 
-    with open("results/summary.md", "w") as f:
+    with open(C.RESULTS_DIR / "summary.md", "w") as f:
         f.write("## Baseline and ablations (held-out seeds)\n\n")
         f.write("| config | n | success [95% CI] | dock pos med/max [cm] | dock head med [deg] | time [s] | "
                 "est. RMSE [cm] | dead-reck. RMSE [cm] | NEES median | frac NEES<7.81 | track RMSE [cm] | collisions |\n")
@@ -102,7 +103,7 @@ if __name__ == "__main__":
         f.write("\n## LQR weight trade-off (R scaled; Q fixed)\n\n| R scale | success | track RMSE [cm] | control effort mean(v^2+w^2) |\n|---|---|---|---|\n")
         for rs, s in lqr_rows:
             f.write(f"| {rs} | {s['succ']*100:.0f}% | {s['track']:.2f} | {s['effort']:.4f} |\n")
-    print(open("results/summary.md").read())
+    print(open(C.RESULTS_DIR / "summary.md").read())
 
     # ---- figures ----
     B = results[configs[0][0]]
@@ -116,7 +117,7 @@ if __name__ == "__main__":
     ax[1].set_xlabel("NEES (clipped at 30)"); ax[1].legend(); ax[1].set_title("estimator consistency")
     ax[2].barh([s["name"] for s in rows][::-1], [s["succ"] * 100 for s in rows][::-1], color="tab:blue")
     ax[2].set_xlabel("success rate [%]"); ax[2].set_title("ablations"); ax[2].tick_params(axis="y", labelsize=7)
-    plt.tight_layout(); fig.savefig("results/evaluation.png", dpi=130); plt.close(fig)
+    plt.tight_layout(); fig.savefig(C.RESULTS_DIR / "evaluation.png", dpi=130); plt.close(fig)
 
     fig, ax = plt.subplots(1, 2, figsize=(10, 3.6))
     ax[0].loglog([s["effort"] for _, s in lqr_rows], [s["track"] for _, s in lqr_rows], "o-")
@@ -125,4 +126,4 @@ if __name__ == "__main__":
     ax[0].set_xlabel("control effort mean(v²+ω²)"); ax[0].set_ylabel("tracking RMSE [cm]"); ax[0].set_title("LQR trade-off")
     ax[1].semilogx([rs for rs, _ in lqr_rows], [s["succ"] * 100 for _, s in lqr_rows], "o-")
     ax[1].set_xlabel("R scale"); ax[1].set_ylabel("success [%]")
-    plt.tight_layout(); fig.savefig("results/lqr_tradeoff.png", dpi=130); plt.close(fig)
+    plt.tight_layout(); fig.savefig(C.RESULTS_DIR / "lqr_tradeoff.png", dpi=130); plt.close(fig)

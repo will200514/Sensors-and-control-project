@@ -1,4 +1,4 @@
-"""Run one Track A mission and write plots to results/.   python main.py --seed 3"""
+
 import argparse
 import numpy as np
 import matplotlib
@@ -51,4 +51,4 @@ if __name__ == "__main__":
     print({k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()
            if k in ("success", "reason", "collided", "dock_pos_err", "dock_head_err", "time", "rmse_pos",
                     "rmse_head", "rmse_pos_dr", "track_rmse", "nees_mean", "n_updates", "n_rejected", "plans")})
-    plot_run(r, f"results/run_seed{a.seed}.png")
+    plot_run(r, C.RESULTS_DIR / f"run_seed{a.seed}.png")
