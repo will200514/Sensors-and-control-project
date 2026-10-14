@@ -48,7 +48,13 @@ class MujocoWorld:
 
         self.renderer = mujoco.Renderer(self.m, 480, 640)
         self.detector = make_detector()
-        self.viewer = mujoco.viewer.launch_passive(self.m, self.d) if cfg.viewer else None
+        # Adds overview cam
+        self.viewer = None
+        if cfg.viewer:
+            self.viewer = mujoco.viewer.launch_passive(self.m, self.d)
+            # Start the viewer on the overview camera
+            self.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+            self.viewer.cam.fixedcamid = self.m.camera("overview").id
 
     def step(self, v_cmd, w_cmd, dt=C.DT):
         # Commanded (v, w) -> left/right wheel speeds in rad/s for the two velocity motors
@@ -75,6 +81,14 @@ class MujocoWorld:
         self.t += dt
         self._check_collision()
         if self.viewer is not None and self.viewer.is_running():
+            if self.viewer is not None and self.viewer.is_running():
+                # Show the onboard camera as a small picture in the bottom-left corner of the viewer
+                self.renderer.update_scene(self.d, camera="cam")
+                small = cv2.resize(self.renderer.render(), (640, 480))
+                vp = self.viewer.viewport
+                corner = mujoco.MjrRect(vp.left + 10, vp.bottom + 10, 640, 480) if vp else mujoco.MjrRect(10, 10, 320, 240)
+                self.viewer.set_images((corner, small))
+                self.viewer.sync()
             self.viewer.sync()
             time.sleep(dt)                     # roughly real time in the viewer
         return wheels_to_body(vl_m, vr_m)
