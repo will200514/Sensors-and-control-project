@@ -31,7 +31,12 @@ def _plan(grid, x_est, goal_phase, cfg):
 def run_trial(seed, cfg=None, log=True):
     cfg = cfg or Cfg()
     rng = np.random.default_rng(seed)
-    world = World(rng, cfg)
+     # A4-MUJOCO: choose the simulator. Was: world = World(rng, cfg)
+    if cfg.backend == "mujoco":
+        from .sim.mujoco_backend import MujocoWorld
+        world = MujocoWorld(rng, cfg)
+    else:
+        world = World(rng, cfg)
     sd = np.array([cfg.p0_pos, cfg.p0_pos, np.deg2rad(cfg.p0_head_deg)])
     x0 = world.truth() + rng.normal(0, sd)     # initial guess: start pose known to within P0
     ekf = EKF(x0, np.diag(sd ** 2), cfg)

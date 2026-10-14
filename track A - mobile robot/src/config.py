@@ -23,12 +23,14 @@ ROBOT_RADIUS = 0.105 # footprint radius [m]
 V_MAX = 0.20         # commanded linear speed limit [m/s] (hardware max 0.22)
 W_MAX = 1.5          # commanded turn-rate limit [rad/s] (hardware max 2.84)
 MOTOR_TAU = 0.12     # first-order wheel-speed lag [s] (unmodelled by the estimator/controller)
+WHEEL_RADIUS = 0.033 # [m]  # A4-MUJOCO: added, used to convert wheel speeds for the MuJoCo motors
 
 # ---- camera (pinhole, 640x480, ~62 deg HFOV) -------------------------------------------------
 FX = 530.0           # focal length [px]
 CX_PX = 320.0        # principal point u [px]
 MARKER_L = 0.10      # ArUco side length [m]
 CAM_OFFSET = 0.06    # camera is mounted this far ahead of the robot centre [m]
+CAM_HEIGHT = 0.12    # [m]  # A4-MUJOCO: added, markers are mounted at camera height
 CAM_MAX_RANGE = 3.5
 CAM_MIN_RANGE = 0.15
 MARKER_MAX_INCIDENCE = np.deg2rad(60.0)
@@ -88,3 +90,7 @@ class Cfg:
     # world randomisation
     n_obstacles: int = 4
     extra_disturbance: float = 0.0  # extra relative wheel-slip bias (stress test)
+    # A4-MUJOCO: added. Which simulator to run, the live viewer, and an optional sideways push (Part E).
+    backend: str = "numpy"          # "numpy" (original) or "mujoco"
+    viewer: bool = False            # MuJoCo live 3D view (macOS: run with mjpython)
+    push_time: float = -1.0         # time [s] of a 6 N sideways push, -1 = off

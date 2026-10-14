@@ -10,6 +10,7 @@ from matplotlib.patches import Circle
 from src import config as C
 from src.mission import run_trial
 from main import ellipse
+from src.config import Cfg
 
 # A4-MUJOCO: added --backend and --push
 ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=3)
