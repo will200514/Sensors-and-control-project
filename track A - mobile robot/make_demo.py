@@ -9,8 +9,8 @@ from matplotlib import animation
 from matplotlib.patches import Circle
 from src import config as C
 from src.mission import run_trial
-from main import ellipse
 from src.config import Cfg
+from main import ellipse
 
 # A4-MUJOCO: added --backend and --push
 ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=3)
@@ -47,5 +47,5 @@ def draw(i):
 
 anim = animation.FuncAnimation(fig, draw, frames=len(T["t"]) // step, interval=60)
 tag = "" if a.backend == "numpy" else "_mujoco" + ("_push" if a.push >= 0 else "")   # A4-MUJOCO
-anim.save(C.RESULTS_DIR / f"demo_seed{a.seed}.gif", writer=animation.PillowWriter(fps=15))
-print("saved results/demo_seed%d.gif" % a.seed)
+anim.save(C.RESULTS_DIR / f"demo_seed{a.seed}{tag}.gif", writer=animation.PillowWriter(fps=15))
+print(f"saved results/demo_seed{a.seed}{tag}.gif")
