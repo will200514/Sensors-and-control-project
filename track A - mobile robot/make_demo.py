@@ -11,8 +11,11 @@ from src import config as C
 from src.mission import run_trial
 from main import ellipse
 
-ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=3); a = ap.parse_args()
-r = run_trial(a.seed); T = r["log"]; step = 4
+# A4-MUJOCO: added --backend and --push
+ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=3)
+ap.add_argument("--backend", choices=["numpy", "mujoco"], default="numpy"); ap.add_argument("--push", type=float, default=-1.0)
+a = ap.parse_args()
+r = run_trial(a.seed, Cfg(backend=a.backend, push_time=a.push)); T = r["log"]; step = 4
 fig, ax = plt.subplots(1, 2, figsize=(11, 5), gridspec_kw=dict(width_ratios=[1.2, 1]))
 m = ax[0]; m.set_aspect("equal"); m.set_xlim(-0.1, 5.1); m.set_ylim(-0.1, 5.1)
 for cx, cy, rr in r["obstacles"]:
@@ -42,5 +45,6 @@ def draw(i):
     return lt, le
 
 anim = animation.FuncAnimation(fig, draw, frames=len(T["t"]) // step, interval=60)
+tag = "" if a.backend == "numpy" else "_mujoco" + ("_push" if a.push >= 0 else "")   # A4-MUJOCO
 anim.save(C.RESULTS_DIR / f"demo_seed{a.seed}.gif", writer=animation.PillowWriter(fps=15))
 print("saved results/demo_seed%d.gif" % a.seed)

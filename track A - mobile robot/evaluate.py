@@ -60,6 +60,20 @@ def run(name, cfg, seeds):
 
 
 if __name__ == "__main__":
+    # A4-MUJOCO: "python evaluate.py mujoco N" runs only the baseline and a push trial on MuJoCo, N seeds each
+    # (a MuJoCo trial takes about 20 s, the full ablation set would take hours). No arguments = original behaviour.
+    if len(sys.argv) > 1 and sys.argv[1] == "mujoco":
+        n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+        base = Cfg(backend="mujoco")
+        rows = [summarise(name, run(name, cfg, range(1000, 1000 + n))) for name, cfg in
+                [("MuJoCo baseline", base), ("MuJoCo, 6 N push at 12 s", replace(base, push_time=12.0))]]
+        with open(C.RESULTS_DIR / "summary_mujoco.md", "w") as f:
+            f.write("| config | n | success | dock pos med/max [cm] | est. RMSE [cm] | NEES median | collisions |\n|---|---|---|---|---|---|---|\n")
+            for s in rows:
+                f.write(f"| {s['name']} | {s['n']} | {s['succ']*100:.0f}% | {s['dock_med']:.1f} / {s['dock_max']:.1f} | "
+                        f"{s['rmse']:.1f} | {s['nees_med']:.2f} | {s['coll']} |\n")
+        print(open(C.RESULTS_DIR / "summary_mujoco.md").read())
+        sys.exit()
     base = Cfg()
     configs = [
         ("baseline (submitted design)", base),

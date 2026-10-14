@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from src.config import Cfg 
 from matplotlib.patches import Circle, Ellipse
 from src import config as C
 from src.mission import run_trial
@@ -46,9 +47,15 @@ def plot_run(r, path):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=3)
+    # A4-MUJOCO: added --backend, --view, --push and passed them to run_trial
+    ap.add_argument("--backend", choices=["numpy", "mujoco"], default="numpy")
+    ap.add_argument("--view", action="store_true")
+    ap.add_argument("--push", type=float, default=-1.0)
     a = ap.parse_args()
-    r = run_trial(a.seed)
+    r = run_trial(a.seed, Cfg(backend=a.backend, viewer=a.view, push_time=a.push))
     print({k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()
            if k in ("success", "reason", "collided", "dock_pos_err", "dock_head_err", "time", "rmse_pos",
                     "rmse_head", "rmse_pos_dr", "track_rmse", "nees_mean", "n_updates", "n_rejected", "plans")})
-    plot_run(r, C.RESULTS_DIR / f"run_seed{a.seed}.png")
+    # A4-MUJOCO: MuJoCo plots get a suffix so they do not overwrite the NumPy ones
+    tag = "" if a.backend == "numpy" else "_mujoco" + ("_push" if a.push >= 0 else "")
+    plot_run(r, C.RESULTS_DIR / f"run_seed{a.seed}{tag}.png")

@@ -3,3 +3,5 @@ scipy
 matplotlib
 pillow
 pytest
+mujoco==3.10.0
+opencv-python>=4.7,<5
