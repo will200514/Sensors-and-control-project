@@ -18,7 +18,7 @@ class MujocoWorld:
         self.rng, self.cfg = rng, cfg
         self.t, self.collided = 0.0, False
 
-        # Same random start and obstacles as the NumPy World, so a seed is the same room in both
+        # Reproducible random start and obstacles for this seed
         self.start, self.obstacles = sample_scenario(rng, cfg)
 
         # Load the room (robot included). 25 physics steps of 2 ms = one 50 ms control step.
@@ -42,7 +42,7 @@ class MujocoWorld:
         self.d.qpos[:7] = [x, y, 0, np.cos(th / 2), 0, 0, np.sin(th / 2)]
         mujoco.mj_forward(self.m, self.d)
 
-        # Wheel angle addresses (the encoders) and the small per-trial wheel-size error, as in World
+        # Wheel angle addresses (the encoders) and the small per-trial wheel-size error
         self.wheels = [self.m.joint("wheel_left").qposadr[0], self.m.joint("wheel_right").qposadr[0]]
         self.bias = rng.normal(0, C.SIGMA_BIAS, 2)
 
@@ -81,16 +81,13 @@ class MujocoWorld:
         self.t += dt
         self._check_collision()
         if self.viewer is not None and self.viewer.is_running():
-            if self.viewer is not None and self.viewer.is_running():
-                # Show the onboard camera as a small picture in the bottom-left corner of the viewer
-                self.renderer.update_scene(self.d, camera="cam")
-                small = cv2.resize(self.renderer.render(), (640, 480))
-                vp = self.viewer.viewport
-                corner = mujoco.MjrRect(vp.left + 10, vp.bottom + 10, 640, 480) if vp else mujoco.MjrRect(10, 10, 320, 240)
-                self.viewer.set_images((corner, small))
-                self.viewer.sync()
+            self.renderer.update_scene(self.d, camera="cam")
+            image = self.renderer.render()
+            vp = self.viewer.viewport
+            corner = mujoco.MjrRect(vp.left + 10, vp.bottom + 10, 640, 480)
+            self.viewer.set_images((corner, image))
             self.viewer.sync()
-            time.sleep(dt)                     # roughly real time in the viewer
+            time.sleep(dt)
         return wheels_to_body(vl_m, vr_m)
 
     def camera(self):
@@ -124,7 +121,7 @@ class MujocoWorld:
         return np.array([x, y, np.arctan2(2 * (qw * qz + qx * qy), 1 - 2 * (qy * qy + qz * qz))])
 
     def _check_collision(self):
-        # Same rule as World, so success rates are comparable between the two simulators
+        # Geometric collision check for evaluation
         x, y = self.truth()[:2]
         in_dock = abs(y - C.DOCK_MARKER[1]) < 0.3 and x > 4.5
         if min(x, 5 - x, y, 5 - y) < C.ROBOT_RADIUS * 0.9 and not in_dock:
@@ -132,3 +129,9 @@ class MujocoWorld:
         for cx, cy, r in self.obstacles:
             if np.hypot(x - cx, y - cy) < r + C.ROBOT_RADIUS:
                 self.collided = True
+
+    def close(self):
+        """Release the live viewer and offscreen renderer."""
+        if self.viewer is not None:
+            self.viewer.close()
+        self.renderer.close()

@@ -18,8 +18,10 @@ def astar(blocked, grid, start_xy, goal_xy):
     blocked = blocked.copy()
     for cell in (s, g):                       # never refuse because the start/goal cell is inflated
         r = 4
-        blocked[max(cell[0] - r, 0):cell[0] + r + 1, max(cell[1] - r, 0):cell[1] + r + 1] &= \
-            (np.hypot(*np.meshgrid(np.arange(-r, r + 1), np.arange(-r, r + 1), indexing="ij")) > r)
+        i0, i1 = max(cell[0] - r, 0), min(cell[0] + r + 1, grid.n)
+        j0, j1 = max(cell[1] - r, 0), min(cell[1] + r + 1, grid.m)
+        ii, jj = np.meshgrid(np.arange(i0, i1), np.arange(j0, j1), indexing="ij")
+        blocked[i0:i1, j0:j1] &= np.hypot(ii - cell[0], jj - cell[1]) > r
     nbrs = [(1, 0, 1), (-1, 0, 1), (0, 1, 1), (0, -1, 1),
             (1, 1, 1.414), (1, -1, 1.414), (-1, 1, 1.414), (-1, -1, 1.414)]
     openq, came, cost = [(0.0, s)], {}, {s: 0.0}
@@ -103,3 +105,4 @@ def make_trajectory(P, v_ref, v_end, dt=C.DT, a_dec=0.08, v_floor=0.04):
     k = 5                                                    # light smoothing of omega_ref
     w = np.convolve(np.pad(w, k, mode="edge"), np.ones(2 * k + 1) / (2 * k + 1), mode="valid")
     return np.column_stack([X[:, 0], X[:, 1], X[:, 2], X[:, 3], w])   # x, y, th, v_r, w_r
+

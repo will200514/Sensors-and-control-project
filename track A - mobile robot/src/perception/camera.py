@@ -45,38 +45,3 @@ def R_cam(rho, fx=C.FX, L=C.MARKER_L, sigma_px=C.SIGMA_PX, sigma_s=C.SIGMA_SIZE_
     """
     return np.diag([(rho ** 2 * sigma_s / (fx * L)) ** 2,
                     (sigma_px / fx) ** 2 + sigma_b_floor ** 2])
-
-
-def _segment_hits_circle(p0, p1, c, r):
-    d = p1 - p0
-    t = np.clip(np.dot(c - p0, d) / max(np.dot(d, d), 1e-12), 0.0, 1.0)
-    return np.linalg.norm(p0 + t * d - c) < r
-
-
-def observe_markers(x, obstacles, rng, fov_deg=62.2):
-    """Simulated detector. Returns a list of (marker_index, u_px, s_px) using TRUE pose x.
-    A marker is detected if it is in range, inside the field of view, seen from the front
-    (incidence < 60 deg) and not occluded by an obstacle."""
-    out = []
-    cam = cam_position(x)
-    half = np.deg2rad(fov_deg) / 2
-    for j, (mx, my, nang) in enumerate(C.MARKERS):
-        mk = np.array([mx, my])
-        d = mk - cam
-        rho = np.linalg.norm(d)
-        if not (C.CAM_MIN_RANGE < rho < C.CAM_MAX_RANGE):
-            continue
-        beta = wrap(np.arctan2(d[1], d[0]) - x[2])
-        if abs(beta) > half:
-            continue
-        incidence = abs(wrap(np.arctan2(-d[1], -d[0]) - nang))   # marker normal vs ray to camera
-        if incidence > C.MARKER_MAX_INCIDENCE:
-            continue
-        if any(_segment_hits_circle(cam, mk, np.array(o[:2]), o[2]) for o in obstacles):
-            continue
-        beta_n = beta + rng.normal(0, C.SIGMA_BEARING_FLOOR)
-        u = C.CX_PX - C.FX * np.tan(beta_n) + rng.normal(0, C.SIGMA_PX)
-        s = C.FX * C.MARKER_L / rho + rng.normal(0, C.SIGMA_SIZE_PX)
-        if s > 2.0:
-            out.append((j, u, s))
-    return out

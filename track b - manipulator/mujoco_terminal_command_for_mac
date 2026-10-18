@@ -1,5 +1,0 @@
-"conda activate ir_env
-mjpython /Users/willmunro/ir-env/Sensors-and-control-project/mujoco_test" 
-# opens mujoco environment for macs, dont think this is needed for windows. 
-#run the file and then paste this into terminal to open the mujoco environment.
-#will need to match it up with your folder directory first. 

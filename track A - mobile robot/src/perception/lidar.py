@@ -1,32 +1,8 @@
-"""2D LiDAR: ray casting for the simulator, and a log-odds occupancy grid built from the
-ESTIMATED pose (never ground truth)."""
+"""Occupancy mapping from MuJoCo LiDAR ranges and the estimated robot pose."""
 import numpy as np
 from .. import config as C
 
 BEAM_ANGLES = np.linspace(-np.pi, np.pi, C.LIDAR_BEAMS, endpoint=False)
-
-
-def ray_cast(pose, obstacles, rng=None, noise=C.LIDAR_SIGMA):
-    """Ranges along BEAM_ANGLES from a robot pose, against circles and the room walls."""
-    px, py, th = pose
-    a = th + BEAM_ANGLES
-    dx, dy = np.cos(a), np.sin(a)
-    xmin, xmax, ymin, ymax = C.ROOM
-    with np.errstate(divide="ignore", invalid="ignore"):
-        tx = np.where(dx > 1e-9, (xmax - px) / dx, np.where(dx < -1e-9, (xmin - px) / dx, np.inf))
-        ty = np.where(dy > 1e-9, (ymax - py) / dy, np.where(dy < -1e-9, (ymin - py) / dy, np.inf))
-    t = np.minimum(tx, ty)
-    for (cx, cy, r) in obstacles:
-        ox, oy = px - cx, py - cy
-        b = dx * ox + dy * oy
-        disc = b * b - (ox * ox + oy * oy - r * r)
-        ok = disc >= 0
-        t_hit = np.where(ok, -b - np.sqrt(np.where(ok, disc, 0)), np.inf)
-        t = np.where((t_hit > 0) & (t_hit < t), t_hit, t)
-    t = np.minimum(t, C.LIDAR_MAX)
-    if rng is not None:
-        t = t + rng.normal(0, noise, t.shape) * (t < C.LIDAR_MAX)
-    return t
 
 
 class OccGrid:

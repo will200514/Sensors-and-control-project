@@ -1,7 +1,0 @@
---- LQR R x1.0
---- LQR R x100.0
-seed 1004: reason=docked collided=False dockpos=7.8cm dockhead=3.5deg time=35s peak track err=37cm at t=2.3s, initial heading offset~150deg, est rmse=6.4cm
-seed 1015: reason=docked collided=False dockpos=21.6cm dockhead=12.2deg time=38s peak track err=41cm at t=31.2s, initial heading offset~74deg, est rmse=4.6cm
-seed 1018: reason=docked collided=False dockpos=10.6cm dockhead=6.7deg time=34s peak track err=32cm at t=3.1s, initial heading offset~78deg, est rmse=1.2cm
-seed 1020: reason=docked collided=False dockpos=5.1cm dockhead=2.1deg time=32s peak track err=39cm at t=2.1s, initial heading offset~152deg, est rmse=5.8cm
-seed 1022: reason=docked collided=False dockpos=5.7cm dockhead=3.2deg time=41s peak track err=84cm at t=14.3s, initial heading offset~74deg, est rmse=21.5cm

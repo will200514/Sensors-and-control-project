@@ -1,61 +1,104 @@
-
+"""Run MuJoCo and save diagnostic plots. macOS: mjpython main.py --seed 3."""
 import argparse
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from src.config import Cfg 
 from matplotlib.patches import Circle, Ellipse
 from src import config as C
+from src.config import Cfg
 from src.mission import run_trial
+from src.model.diffdrive import wrap
+from tools.make_room import build_room
 
 
-def ellipse(ax, mean, cov, n=2.0, **kw):
-    w, V = np.linalg.eigh(cov); w = np.maximum(w, 1e-12)
-    ax.add_patch(Ellipse(mean, 2 * n * np.sqrt(w[0]), 2 * n * np.sqrt(w[1]),
-                         angle=np.degrees(np.arctan2(V[1, 0], V[0, 0])), **kw))
+def ellipse(ax, mean, cov, n=2.0, **kwargs):
+    values, vectors = np.linalg.eigh(cov)
+    values = np.maximum(values, 1e-12)
+    patch = Ellipse(
+        mean, 2 * n * np.sqrt(values[0]), 2 * n * np.sqrt(values[1]),
+        angle=np.degrees(np.arctan2(vectors[1, 0], vectors[0, 0])), **kwargs,
+    )
+    ax.add_patch(patch)
+    return patch
 
 
-def plot_run(r, path):
-    T = r["log"]
-    fig, ax = plt.subplots(1, 3, figsize=(17, 5.2), gridspec_kw=dict(width_ratios=[1.25, 1, 1]))
-    a = ax[0]
-    a.imshow(r["grid"].T, origin="lower", extent=(0, 5, 0, 5), cmap="Greys", alpha=0.25)
-    for cx, cy, rr in r["obstacles"]:
-        a.add_patch(Circle((cx, cy), rr, color="tab:gray", alpha=0.6))
-    a.plot(C.MARKERS[:, 0], C.MARKERS[:, 1], "ks", ms=5, label="ArUco markers")
-    a.plot(*C.DOCK_MARKER[:2], "gs", ms=9, label="dock marker")
-    a.plot(*C.WAYPOINT_1, "b*", ms=12, label="waypoint 1")
-    a.plot(T["dr"][:, 0], T["dr"][:, 1], "b--", lw=1, label="dead reckoning")
-    a.plot(T["true"][:, 0], T["true"][:, 1], "k", lw=2, label="true path")
-    a.plot(T["est"][:, 0], T["est"][:, 1], "r", lw=1.2, label="EKF estimate")
-    for i in range(0, len(T["est"]), 60):
-        ellipse(a, T["est"][i, :2], T["P"][i][:2, :2], 3.0, fc="none", ec="r", lw=0.7, alpha=0.7)
-    a.set_aspect("equal"); a.set_xlim(-0.1, 5.1); a.set_ylim(-0.1, 5.1)
-    a.legend(fontsize=7, loc="upper right"); a.set_title(f"seed {r['seed']}: {r['reason']}, success={r['success']}")
-    err = T["true"] - T["est"]; err[:, 2] = (err[:, 2] + np.pi) % (2 * np.pi) - np.pi
-    sig = np.sqrt(np.array([P[0, 0] + P[1, 1] for P in T["P"]]))
-    ax[1].plot(T["t"], np.hypot(err[:, 0], err[:, 1]), "r", label="actual position error")
-    ax[1].plot(T["t"], 2 * sig, "k--", label=r"2$\sigma$ (x,y)")
-    ax[1].plot(T["t"], np.hypot(*(T["true"][:, :2] - T["dr"][:, :2]).T), "b:", label="dead reckoning error")
-    ax[1].set_xlabel("t [s]"); ax[1].set_ylabel("[m]"); ax[1].legend(fontsize=8); ax[1].set_title("estimate vs truth")
-    ax[2].plot(T["t"], r["nees"], lw=0.8); ax[2].axhline(3, color="k", ls=":")
-    ax[2].axhline(7.81, color="r", ls="--", lw=0.8); ax[2].set_yscale("log")
-    ax[2].set_xlabel("t [s]"); ax[2].set_title(f"NEES (mean {r['nees_mean']:.2f}; ideal 3, 95% bound 7.8)")
-    plt.tight_layout(); fig.savefig(path, dpi=130); plt.close(fig)
+def plot_run(result, path):
+    if "log" not in result:
+        print(f"No samples to plot: {result['reason']}")
+        return
+    data = result["log"]
+    time = data["t"]
+    error = data["true"] - data["est"]
+    error[:, 2] = wrap(error[:, 2])
+    covariance = data["P"]
+    fig, axes = plt.subplots(2, 3, figsize=(17, 10))
+    route, position, heading, tracking, consistency, visibility = axes.flat
+
+    route.imshow(result["grid"].T, origin="lower", extent=C.ROOM, cmap="Greys", alpha=0.25)
+    for x, y, radius in result["obstacles"]:
+        route.add_patch(Circle((x, y), radius, color="gray", alpha=0.6))
+    route.plot(*C.MARKERS[0, :2], "ks", label="Marker 0")
+    route.plot(*C.DOCK_MARKER[:2], "gs", label="Dock marker 1")
+    for key, style, label in [("true", "k-", "Actual"), ("est", "r-", "EKF"), ("dr", "b--", "Odometry only")]:
+        route.plot(data[key][:, 0], data[key][:, 1], style, label=label)
+    for i in range(0, len(time), 60):
+        ellipse(route, data["est"][i, :2], covariance[i, :2, :2], 2.0,
+                fc="none", ec="r", alpha=0.4)
+    route.set(xlim=(-0.1, 5.1), ylim=(-0.1, 5.1), xlabel="x [m]", ylabel="y [m]", title="Robot path and 2-sigma ellipses")
+    route.set_aspect("equal")
+    route.legend(fontsize=8)
+
+    position.plot(time, np.linalg.norm(error[:, :2], axis=1), "r", label="EKF position error")
+    position.plot(time, np.linalg.norm(data["true"][:, :2] - data["dr"][:, :2], axis=1), "b:", label="Odometry-only error")
+    position.plot(time, 2 * np.sqrt(covariance[:, 0, 0] + covariance[:, 1, 1]), "k--", label="2 sqrt(Pxx + Pyy), scale only")
+    position.set(title="Position error", ylabel="Error [m]")
+    position.legend(fontsize=8)
+
+    heading.plot(time, np.degrees(error[:, 2]), "r", label="Heading error")
+    bound = 2 * np.degrees(np.sqrt(np.maximum(covariance[:, 2, 2], 0)))
+    heading.fill_between(time, -bound, bound, color="gray", alpha=0.25, label="±2 sigma")
+    heading.set(title="Heading error", ylabel="Error [degrees]")
+    heading.legend(fontsize=8)
+
+    distance = np.linalg.norm(data["true"][:, :2] - data["ref"][:, :2], axis=1)
+    tracking.plot(time, distance)
+    tracking.set(title="Distance to active reference point", ylabel="Distance [m]")
+
+    consistency.plot(time, np.maximum(result["nees"], 1e-12), label="NEES")
+    consistency.axhline(3, color="k", ls=":", label="Expected value: 3")
+    consistency.axhline(7.815, color="r", ls="--", label="95th percentile, 3 DOF")
+    consistency.set(yscale="log", title="Filter consistency (NEES)")
+    consistency.legend(fontsize=8)
+
+    visibility.step(time, data["n_vis"], where="post")
+    visibility.set(title="Detected markers (latest camera frame)", ylabel="Count", yticks=[0, 1, 2], ylim=(-0.1, 2.1))
+    for ax in [position, heading, tracking, consistency, visibility]:
+        ax.set_xlabel("Time [s]")
+        ax.grid(alpha=0.2)
+    fig.suptitle(f"MuJoCo seed {result['seed']} | {result['reason']} | success={result['success']} | dock error={result['dock_pos_err']:.3f} m")
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    print(f"Saved {path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--seed", type=int, default=3)
+    parser.add_argument("--push", type=float, default=-1.0)
+    parser.add_argument("--no-view", action="store_true", help="Run MuJoCo without the live viewer")
+    args = parser.parse_args()
+    build_room()  # Keep rendered markers synchronised with configuration.
+    result = run_trial(args.seed, Cfg(viewer=not args.no_view, push_time=args.push))
+    keys = ("success", "reason", "collided", "dock_pos_err", "dock_head_err", "time",
+            "rmse_pos", "rmse_head", "rmse_pos_dr", "track_rmse", "nees_mean",
+            "n_updates", "n_rejected", "n_recoveries", "plans")
+    print({k: round(v, 4) if isinstance(v, (float, np.floating)) else v for k, v in result.items() if k in keys})
+    tag = "_push" if args.push >= 0 else ""
+    plot_run(result, C.RESULTS_DIR / f"run_seed{args.seed}_mujoco{tag}.png")
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("--seed", type=int, default=3)
-    # A4-MUJOCO: added --backend, --view, --push and passed them to run_trial
-    ap.add_argument("--backend", choices=["numpy", "mujoco"], default="numpy")
-    ap.add_argument("--view", action="store_true")
-    ap.add_argument("--push", type=float, default=-1.0)
-    a = ap.parse_args()
-    r = run_trial(a.seed, Cfg(backend=a.backend, viewer=a.view, push_time=a.push))
-    print({k: (round(v, 4) if isinstance(v, float) else v) for k, v in r.items()
-           if k in ("success", "reason", "collided", "dock_pos_err", "dock_head_err", "time", "rmse_pos",
-                    "rmse_head", "rmse_pos_dr", "track_rmse", "nees_mean", "n_updates", "n_rejected", "plans")})
-    # A4-MUJOCO: MuJoCo plots get a suffix so they do not overwrite the NumPy ones
-    tag = "" if a.backend == "numpy" else "_mujoco" + ("_push" if a.push >= 0 else "")
-    plot_run(r, C.RESULTS_DIR / f"run_seed{a.seed}{tag}.png")
+    main()
+

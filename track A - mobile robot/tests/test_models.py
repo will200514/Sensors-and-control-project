@@ -2,7 +2,6 @@ import numpy as np
 from src import config as C
 from src.model.diffdrive import (f_motion, F_motion, G_motion, error_model, c2d, ctrb, wrap)
 from src.perception.camera import h_cam, H_cam
-from src.perception.calibration import calibrate
 
 
 def num_jac(fn, x, eps=1e-6):
@@ -42,8 +41,3 @@ def test_controllability_depends_on_speed():
     r = lambda v, w: np.linalg.matrix_rank(ctrb(*error_model(v, w)))
     assert r(0.15, 0.3) == 3
     assert r(0.0, 0.0) == 2          # e_y cannot be corrected without moving
-
-
-def test_calibration_recovers_intrinsics():
-    cal = calibrate()
-    assert abs(cal["fx_bearing"] - C.FX) < 10 and abs(cal["cx"] - C.CX_PX) < 5
