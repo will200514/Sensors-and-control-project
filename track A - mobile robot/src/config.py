@@ -20,7 +20,7 @@ LIDAR_EVERY = 4      # LiDAR at 5 Hz
 MAX_TIME = 180.0     # trial timeout [s]
 
 # ---- platform (TurtleBot3 Burger) -------------------------------------------------------
-TRACK = 0.160        # wheel separation b [m]
+TRACK = 0.160        # wheel separation b [m] (difference between the drive wheels)
 ROBOT_RADIUS = 0.105 # footprint radius [m]
 V_MAX = 0.20         # commanded linear speed limit [m/s] (hardware max 0.22)
 W_MAX = 1.5          # commanded turn-rate limit [rad/s] (hardware max 2.84)
