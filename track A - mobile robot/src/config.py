@@ -70,16 +70,16 @@ class Cfg:
     # estimator
     use_camera: bool = True
     q_scale: float = 4.0            # multiplies the derived process covariance
-    r_scale: float = 2.0            # multiplies the derived camera covariance
+    r_scale: float = 1.0            # multiplies the derived camera covariance
     gate: float = 9.21              # chi2(2) 99% innovation gate (None = off)
     fx_filter: float = FX           # focal length the filter believes (calibration error ablation)
-    p0_pos: float = 0.10
-    p0_head_deg: float = 5.0
+    p0_pos: float = 0.5
+    p0_head_deg: float = 10
     # controller (Bryson's rule: Q = 1/e_max^2, R = 1/u_max^2)
     e_max: tuple = (0.05, 0.05, 0.10)   # x [m], y [m], theta [rad]
     u_max: tuple = (0.05, 0.5)          # delta v [m/s], delta omega [rad/s]
-    lqr_q_scale: float = 1.0
-    lqr_r_scale: float = 1.0
+    lqr_q_scale: float = 2
+    lqr_r_scale: float = 1
     # planner
     v_ref: float = 0.18
     inflate: float = 0.24
