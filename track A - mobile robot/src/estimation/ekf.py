@@ -53,8 +53,8 @@ class EKF:
     # This is the EKF’s measurement-update step. It processes one ArUco marker observation.
     # estimates camera uncertainty
     # uses the innovation covariance to combine:
-    #Uncertainty in the predicted observation caused by pose uncertainty.
-    #Uncertainty in the camera measurement.
+    # Uncertainty in the predicted observation caused by pose uncertainty.
+    # Uncertainty in the camera measurement.
     # computes NIS: NIS measures how surprising the disagreement is relative to the expected uncertainty.
     def update_marker(self, mk_xy, u_px, s_px):
         cfg = self.cfg

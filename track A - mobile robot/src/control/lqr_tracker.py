@@ -1,10 +1,18 @@
-"""Time-varying LQR trajectory tracker acting on the ESTIMATED pose only."""
+"""Time-varying LQR trajectory tracker acting on the ESTIMATED pose only.
+uses the estimated pose from the EKF
+create trajectory generation
+compare estimate and trajectory and calculates the movement comands
+"""
 import numpy as np
 from .. import config as C
 from ..model.diffdrive import error_model, c2d, dlqr, wrap
 
 
 class LQRTracker:
+
+    # sets up the controller
+    # builds the lqr weighting matrices
+    # 
     def __init__(self, cfg):
         self.Q = cfg.lqr_q_scale * np.diag(1.0 / np.array(cfg.e_max) ** 2)    # Bryson's rule
         self.R = cfg.lqr_r_scale * np.diag(1.0 / np.array(cfg.u_max) ** 2)
