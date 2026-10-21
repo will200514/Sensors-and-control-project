@@ -35,22 +35,27 @@ def plot_run(result, path):
     fig, axes = plt.subplots(2, 3, figsize=(17, 10))
     route, position, heading, tracking, consistency, visibility = axes.flat
 
-    route.imshow(result["grid"].T, origin="lower", extent=C.ROOM, cmap="Greys", alpha=0.25)
+    route.imshow(result["grid"].T, origin="lower", extent=result["grid_bounds"], cmap="Greys", alpha=0.25)
     for x, y, radius in result["obstacles"]:
         route.add_patch(Circle((x, y), radius, color="gray", alpha=0.6))
-    route.plot(*C.MARKERS[0, :2], "ks", label="Marker 0")
-    route.plot(*C.DOCK_MARKER[:2], "gs", label="Dock marker 1")
+    route.plot(result["room"][:, 0], result["room"][:, 1], "k:", label="Room (evaluation only)")
+    route.plot(0, 0, "gs", label="Dock marker: origin")
+    route.plot(*C.DOCK_TARGET[:2], "g+", label="Stopping target")
     for key, style, label in [("true", "k-", "Actual"), ("est", "r-", "EKF"), ("dr", "b--", "Odometry only")]:
-        route.plot(data[key][:, 0], data[key][:, 1], style, label=label)
+        route.plot(data["plot_" + key][:, 0], data["plot_" + key][:, 1], style, label=label)
     for i in range(0, len(time), 60):
-        ellipse(route, data["est"][i, :2], covariance[i, :2, :2], 2.0,
+        ellipse(route, data["plot_est"][i, :2], data["plot_P"][i, :2, :2], 2.0,
                 fc="none", ec="r", alpha=0.4)
-    route.set(xlim=(-0.1, 5.1), ylim=(-0.1, 5.1), xlabel="x [m]", ylabel="y [m]", title="Robot path and 2-sigma ellipses")
+    room = result["room"]
+    route.set(xlim=(room[:, 0].min()-0.2, room[:, 0].max()+0.2),
+              ylim=(room[:, 1].min()-0.2, room[:, 1].max()+0.2),
+              xlabel="Dock-frame x [m] (out from wall)", ylabel="Dock-frame y [m]",
+              title="Dock frame; search path transformed for display only")
     route.set_aspect("equal")
     route.legend(fontsize=8)
 
     position.plot(time, np.linalg.norm(error[:, :2], axis=1), "r", label="EKF position error")
-    position.plot(time, np.linalg.norm(data["true"][:, :2] - data["dr"][:, :2], axis=1), "b:", label="Odometry-only error")
+    position.plot(time, np.linalg.norm(data["true"][:, :2] - data["dr"][:, :2], axis=1), "b:", label="Odometry error (same initial fix)")
     position.plot(time, 2 * np.sqrt(covariance[:, 0, 0] + covariance[:, 1, 1]), "k--", label="2 sqrt(Pxx + Pyy), scale only")
     position.set(title="Position error", ylabel="Error [m]")
     position.legend(fontsize=8)
@@ -72,8 +77,10 @@ def plot_run(result, path):
     consistency.legend(fontsize=8)
 
     visibility.step(time, data["n_vis"], where="post")
-    visibility.set(title="Detected markers (latest camera frame)", ylabel="Count", yticks=[0, 1, 2], ylim=(-0.1, 2.1))
+    visibility.set(title="Detected markers (latest camera frame)", ylabel="Count", yticks=[0, 1], ylim=(-0.1, 1.1))
     for ax in [position, heading, tracking, consistency, visibility]:
+        if result["acquisition_time"] is not None:
+            ax.axvline(result["acquisition_time"], color="g", ls=":", alpha=0.7)
         ax.set_xlabel("Time [s]")
         ax.grid(alpha=0.2)
     fig.suptitle(f"MuJoCo seed {result['seed']} | {result['reason']} | success={result['success']} | dock error={result['dock_pos_err']:.3f} m")
@@ -93,7 +100,7 @@ def main():
     result = run_trial(args.seed, Cfg(viewer=not args.no_view, push_time=args.push))
     keys = ("success", "reason", "collided", "dock_pos_err", "dock_head_err", "time",
             "rmse_pos", "rmse_head", "rmse_pos_dr", "track_rmse", "nees_mean",
-            "n_updates", "n_rejected", "n_recoveries", "plans")
+            "n_updates", "n_rejected", "n_recoveries", "plans", "acquisition_time", "localised")
     print({k: round(v, 4) if isinstance(v, (float, np.floating)) else v for k, v in result.items() if k in keys})
     tag = "_push" if args.push >= 0 else ""
     plot_run(result, C.RESULTS_DIR / f"run_seed{args.seed}_mujoco{tag}.png")

@@ -7,7 +7,7 @@ from .. import config as C
 
 def inflated_map(grid, inflate):
     occ = grid.occupied().copy()
-    occ[0, :] = occ[-1, :] = occ[:, 0] = occ[:, -1] = True          # room boundary is known
+    occ[0, :] = occ[-1, :] = occ[:, 0] = occ[:, -1] = True          # finite map extent only, not simulator room geometry
     dist = distance_transform_edt(~occ) * grid.res
     return dist < inflate
 
@@ -31,7 +31,7 @@ def astar(blocked, grid, start_xy, goal_xy):
             path = [cur]
             while cur in came:
                 cur = came[cur]; path.append(cur)
-            return [((i + 0.5) * grid.res, (j + 0.5) * grid.res) for i, j in path[::-1]]
+            return [grid.cell_to_world(i, j) for i, j in path[::-1]]
         for di, dj, c in nbrs:
             n = (cur[0] + di, cur[1] + dj)
             if not (0 <= n[0] < grid.n and 0 <= n[1] < grid.m) or blocked[n]:
@@ -105,4 +105,5 @@ def make_trajectory(P, v_ref, v_end, dt=C.DT, a_dec=0.08, v_floor=0.04):
     k = 5                                                    # light smoothing of omega_ref
     w = np.convolve(np.pad(w, k, mode="edge"), np.ones(2 * k + 1) / (2 * k + 1), mode="valid")
     return np.column_stack([X[:, 0], X[:, 1], X[:, 2], X[:, 3], w])   # x, y, th, v_r, w_r
+
 

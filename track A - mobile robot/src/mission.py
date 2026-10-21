@@ -1,121 +1,626 @@
-"""Mission loop: sense -> estimate -> plan -> track. The controller sees the EKF estimate only."""
+"""Single-marker docking mission.
+
+1. Search from a local starting pose of [0, 0, 0].
+2. Stop and confirm the docking marker.
+3. Initialise the EKF in the marker-centred docking frame.
+4. Plan and track a docking approach using the estimated pose.
+
+Simulation truth is used only for logging and evaluation.
+"""
+
 import numpy as np
+
 from . import config as C
 from .config import Cfg
 from .model.diffdrive import wrap, f_motion
 from .estimation.ekf import EKF
+from .perception.docking_pose import estimate_dock_pose
 from .perception.lidar import OccGrid
-from .control.planner import inflated_map, astar, shortcut, smooth_path, make_trajectory
+from .control.planner import (
+    inflated_map,
+    astar,
+    shortcut,
+    smooth_path,
+    make_trajectory,
+)
 from .control.lqr_tracker import LQRTracker
 from .sim.mujoco_backend import MujocoWorld
+from .evaluation_frames import (
+    relative_pose,
+    display_pose,
+    dock_origin,
+)
 
-REPLAN_STEPS = 100        # periodic replan (5 s); earlier replans only if the path becomes blocked
+
+REPLAN_STEPS = 100
 
 
-def _plan(grid, x_est, cfg):
+def _plan(grid, pose, cfg):
+    """Plan to the marker-relative approach, then towards the dock."""
     blocked = inflated_map(grid, cfg.inflate)
-    path = astar(blocked, grid, x_est[:2], C.LEADIN)
+
+    path = astar(
+        blocked,
+        grid,
+        pose[:2],
+        C.DOCK_APPROACH,
+    )
+
     if path is None:
         return None
-    P = smooth_path(shortcut(path, blocked, grid), blocked, grid)
-    P = np.vstack([P, np.linspace(C.LEADIN, C.DOCK_POSE[:2], 12)[1:]])    # straight docking lead-in
-    return make_trajectory(P, cfg.v_ref, v_end=0.03)
+
+    path = shortcut(path, blocked, grid)
+    path = smooth_path(path, blocked, grid)
+
+    docking_line = np.linspace(
+        C.DOCK_APPROACH,
+        C.DOCK_TARGET[:2],
+        30,
+    )
+
+    points = np.vstack([path, docking_line[1:]])
+
+    return make_trajectory(
+        points,
+        cfg.v_ref,
+        v_end=0.03,
+    )
+
+
+def _camera_pose(world, cfg):
+    """Return one docking-marker pose and the detection count."""
+    detections = world.camera()
+
+    for marker_id, corners in detections:
+        if marker_id == C.DOCK_MARKER_ID:
+            observation = estimate_dock_pose(corners, cfg)
+            return observation, len(detections)
+
+    return None, len(detections)
+
+
+def _confirmed_pose(observations):
+    """Combine agreeing stationary observations without overconfidence."""
+    poses = np.array([obs.pose for obs in observations])
+
+    # Unwrap headings around the first observation before averaging.
+    poses[:, 2] = poses[0, 2] + wrap(
+        poses[:, 2] - poses[0, 2]
+    )
+
+    pose = np.median(poses, axis=0)
+    differences = poses - pose
+
+    position_spread = np.linalg.norm(
+        differences[:, :2],
+        axis=1,
+    )
+    heading_spread = np.abs(differences[:, 2])
+
+    if (
+        position_spread.max() > 0.35
+        or heading_spread.max() > np.deg2rad(15.0)
+    ):
+        return None
+
+    covariance = np.mean(
+        [obs.covariance for obs in observations],
+        axis=0,
+    )
+
+    # Retain shared camera uncertainty and add observed scatter.
+    covariance += (
+        differences.T @ differences / len(observations)
+    )
+
+    pose[2] = wrap(pose[2])
+
+    return pose, covariance
+
+
+def _record(
+    data,
+    world,
+    ekf,
+    dead_reckoning,
+    tracker,
+    localised,
+    phase,
+    command,
+    error,
+    n_visible,
+):
+    """Record matching coordinate frames. Evaluation only."""
+    origin = dock_origin() if localised else world.start
+    actual = world.truth()
+
+    reference = (
+        tracker.traj[tracker.idx, :3].copy()
+        if tracker.traj is not None
+        else np.full(3, np.nan)
+    )
+
+    # Rotate covariance only when displaying start-frame data
+    # in the docking frame.
+    angle = (
+        0.0
+        if localised
+        else world.start[2] - dock_origin()[2]
+    )
+
+    c, s = np.cos(angle), np.sin(angle)
+
+    rotation = np.array([
+        [c, -s, 0.0],
+        [s,  c, 0.0],
+        [0.0, 0.0, 1.0],
+    ])
+
+    sample = {
+        "t": world.t,
+        "true": relative_pose(actual, origin),
+        "est": ekf.x.copy(),
+        "P": ekf.P.copy(),
+        "dr": dead_reckoning.copy(),
+        "ref": reference,
+        "e": np.asarray(error).copy(),
+        "u": command,
+        "n_vis": n_visible,
+        "frame": "dock" if localised else "start",
+        "phase": phase,
+        "plot_true": relative_pose(actual, dock_origin()),
+        "plot_est": display_pose(
+            ekf.x, world.start, localised
+        ),
+        "plot_dr": display_pose(
+            dead_reckoning, world.start, localised
+        ),
+        "plot_P": rotation @ ekf.P @ rotation.T,
+    }
+
+    for name, value in sample.items():
+        data.setdefault(name, []).append(value)
+
+
+def _results(
+    seed,
+    cfg,
+    world,
+    ekf,
+    grid,
+    data,
+    reason,
+    acquisition_time,
+    plans,
+    phase,
+):
+    """Calculate success and plotting data. Evaluation only."""
+    actual = relative_pose(world.truth(), dock_origin())
+
+    position_error = np.linalg.norm(
+        actual[:2] - C.DOCK_TARGET[:2]
+    )
+    heading_error = abs(
+        float(wrap(actual[2] - C.DOCK_TARGET[2]))
+    )
+
+    success = (
+        reason == "docked"
+        and position_error < C.DOCK_TOL_POS
+        and heading_error < C.DOCK_TOL_HEAD
+        and not world.collided
+    )
+
+    xmin, xmax, ymin, ymax = C.ROOM
+
+    room_corners = [
+        (xmin, ymin),
+        (xmax, ymin),
+        (xmax, ymax),
+        (xmin, ymax),
+        (xmin, ymin),
+    ]
+
+    room = np.array([
+        relative_pose([x, y, 0.0], dock_origin())[:2]
+        for x, y in room_corners
+    ])
+
+    obstacles = [
+        (
+            *relative_pose(
+                [x, y, 0.0], dock_origin()
+            )[:2],
+            radius,
+        )
+        for x, y, radius in world.obstacles
+    ]
+
+    result = {
+        "seed": seed,
+        "cfg": cfg,
+        "success": bool(success),
+        "reason": reason,
+        "collided": world.collided,
+        "time": world.t,
+        "dock_pos_err": float(position_error),
+        "dock_head_err": heading_error,
+        "n_updates": ekf.n_updates,
+        "n_rejected": ekf.n_rejected,
+        "n_recoveries": ekf.n_recoveries,
+        "plans": plans,
+        "localised": acquisition_time is not None,
+        "acquisition_time": acquisition_time,
+        "start": world.start.copy(),
+        "obstacles": obstacles,
+        "room": room,
+        "grid": grid.occupied(),
+        "grid_bounds": grid.bounds,
+        "sensor_snapshots": {},
+    }
+
+    # Supports the separate sensing display in the newer backend.
+    sensing_image = getattr(world, "sensing_image", None)
+
+    if callable(sensing_image):
+        result["sensor_image"] = sensing_image(
+            ekf.x,
+            phase,
+            acquisition_time is not None,
+        )
+
+    if not data:
+        return result
+
+    samples = {
+        name: np.asarray(values)
+        for name, values in data.items()
+    }
+
+    error = samples["true"] - samples["est"]
+    error[:, 2] = wrap(error[:, 2])
+
+    dr_error = samples["true"] - samples["dr"]
+    dr_error[:, 2] = wrap(dr_error[:, 2])
+
+    nees = np.array([
+        e @ np.linalg.solve(P, e)
+        for e, P in zip(error, samples["P"])
+    ])
+
+    dock_samples = samples["frame"] == "dock"
+
+    tracking_error = np.linalg.norm(
+        samples["true"][:, :2]
+        - samples["ref"][:, :2],
+        axis=1,
+    )
+
+    tracking_samples = (
+        dock_samples & np.isfinite(tracking_error)
+    )
+
+    def rms_squared(values):
+        if len(values) == 0:
+            return float("nan")
+        return float(np.sqrt(np.mean(values)))
+
+    result.update({
+        "log": samples,
+        "nees": nees,
+        "rmse_pos": rms_squared(
+            np.sum(error[dock_samples, :2] ** 2, axis=1)
+        ),
+        "rmse_head": rms_squared(
+            error[dock_samples, 2] ** 2
+        ),
+        "rmse_pos_dr": rms_squared(
+            np.sum(dr_error[dock_samples, :2] ** 2, axis=1)
+        ),
+        "track_rmse": rms_squared(
+            tracking_error[tracking_samples] ** 2
+        ),
+        "effort": float(np.mean(
+            np.sum(samples["u"] ** 2, axis=1)
+        )),
+        "nees_mean": (
+            float(nees[dock_samples].mean())
+            if dock_samples.any()
+            else float("nan")
+        ),
+    })
+
+    return result
 
 
 def run_trial(seed, cfg=None, log=True):
     cfg = cfg or Cfg()
     rng = np.random.default_rng(seed)
     world = MujocoWorld(rng, cfg)
-      
+
     try:
-        sd = np.array([cfg.p0_pos, cfg.p0_pos, np.deg2rad(cfg.p0_head_deg)])
-        x0 = world.truth() + rng.normal(0, sd)     # initial guess: start pose known to within P0
-        ekf = EKF(x0, np.diag(sd ** 2), cfg)
-        grid, trk = OccGrid(), LQRTracker(cfg)
-        x_dr = x0.copy()                            # dead-reckoning baseline (logging only)
-        plan_locked, last_plan, hold, plans = False, -10 ** 9, 0, 0
+        # The robot's initial pose defines the starting frame.
+        initial_sd = np.array([
+            cfg.p0_pos,
+            cfg.p0_pos,
+            np.deg2rad(cfg.p0_head_deg),
+        ])
+
+        ekf = EKF(
+            np.zeros(3),
+            np.diag(initial_sd ** 2),
+            cfg,
+        )
+
+        grid = OccGrid()
+        tracker = LQRTracker(cfg)
+        dead_reckoning = np.zeros(3)
+        data = {}
+
+        localised = False
+        acquisition_time = None
+        last_fix = -np.inf
+        last_detection = -np.inf
+        confirmation_start = None
+        observations = []
+
+        phase = "search"
+        reason = "timeout"
+        n_visible = 0
+        plans = 0
+        last_plan = -REPLAN_STEPS
         force_replan = False
-        L = dict(t=[], true=[], est=[], P=[], dr=[], ref=[], e=[], u=[], n_vis=[]) if log else None
+        hold = 0
 
-        def sense_camera():
-            n = acc = 0
-            for j, u_px, s_px in world.camera():
-                acc += ekf.update_marker(C.MARKERS[j][:2], u_px, s_px); n += 1
-            ekf.end_frame(n, acc)
-            return n
+        # Defaults also support the earlier configuration file.
+        required_samples = max(
+            1, int(getattr(cfg, "initial_pose_samples", 5))
+        )
+        settle_time = getattr(
+            cfg, "acquisition_settle_time", 0.3
+        )
 
-        n_vis = sense_camera()
-        grid.update(ekf.x, world.lidar())
-        max_steps = int(C.MAX_TIME / C.DT)
-        done_reason = "timeout"
-        for k in range(max_steps):
-            if world.viewer is not None and not world.viewer.is_running():
-                done_reason = "viewer_closed"
+        present_sensors = getattr(
+            world, "present_sensors", None
+        )
+
+        if log:
+            print(
+                "Start frame: [0, 0, 0]. "
+                "Searching for docking marker.",
+                flush=True,
+            )
+
+            _record(
+                data, world, ekf, dead_reckoning,
+                tracker, False, phase,
+                (0.0, 0.0), np.zeros(3), 0,
+            )
+
+        # Sense LiDAR immediately, including during search.
+        ranges = world.lidar()
+
+        for step in range(int(C.MAX_TIME / C.DT)):
+            if (
+                world.viewer is not None
+                and not world.viewer.is_running()
+            ):
+                reason = "viewer_closed"
                 break
-            x_est = ekf.x
-            # ---------------- docking approach (uses ESTIMATE only) ----------------
-            in_lead = x_est[0] > C.LEADIN[0] - 0.15 and abs(x_est[1] - C.LEADIN[1]) < 0.12
-            if in_lead:
-                plan_locked = True
-            # ---------------- (re)planning ----------------
-            if trk.traj is None or (not plan_locked and (force_replan or k - last_plan >= REPLAN_STEPS)):
-                force_replan = False
-                traj = _plan(grid, x_est, cfg)
-                last_plan, plans = k, plans + 1
-                if traj is not None:
-                    trk.set_trajectory(traj)
-                elif trk.traj is None:
-                    done_reason = "no_path"; break
-            # ---------------- control ----------------
-            if trk.done():
-                hold += 1
-                u_cmd, e = (0.0, 0.0), np.zeros(3)
-                if hold > 30:
-                    done_reason = "docked"; break
-            else:
-                u_cmd, e = trk.command(x_est)
-            odo = world.step(*u_cmd)
-            # ---------------- estimation ----------------
-            ekf.predict(odo)
-            x_dr = f_motion(x_dr, odo, C.DT)
-            if (k + 1) % C.CAM_EVERY == 0:
-                n_vis = sense_camera()
-            if (k + 1) % C.LIDAR_EVERY == 0:
-                grid.update(ekf.x, world.lidar())
-                if trk.traj is not None and not plan_locked:      # is the remaining path still free?
-                    bl = inflated_map(grid, cfg.inflate)
-                    rem = trk.traj[trk.idx::5, :2]
-                    ix, iy = grid.to_cell(rem[:, 0], rem[:, 1])
-                    force_replan = bool(bl[ix, iy].any())
-            if log:
-                L["t"].append((k + 1) * C.DT); L["true"].append(world.truth()); L["est"].append(ekf.x.copy())
-                L["P"].append(ekf.P.copy()); L["dr"].append(x_dr.copy()); L["e"].append(e); L["u"].append(u_cmd)
-                L["n_vis"].append(n_vis)
-                L["ref"].append(trk.traj[trk.idx, :3].copy() if trk.traj is not None else np.full(3, np.nan))
 
-        xt = world.truth()                          # evaluation only from here on
-        pos_err_dock = np.linalg.norm(xt[:2] - C.DOCK_POSE[:2])
-        head_err_dock = abs(float(wrap(xt[2] - C.DOCK_POSE[2])))
-        success = (done_reason == "docked" and pos_err_dock < C.DOCK_TOL_POS
-                   and head_err_dock < C.DOCK_TOL_HEAD and not world.collided)
-        res = dict(seed=seed, success=bool(success), reason=done_reason, collided=world.collided,
-                   dock_pos_err=pos_err_dock, dock_head_err=head_err_dock, time=world.t,
-                   n_updates=ekf.n_updates, n_recoveries=ekf.n_recoveries, n_rejected=ekf.n_rejected, plans=plans,
-                   start=world.start, obstacles=world.obstacles, cfg=cfg)
-        if log and L["t"]:
-            T = {k_: np.array(v) for k_, v in L.items()}
-            err = T["true"] - T["est"]; err[:, 2] = wrap(err[:, 2])
-            nees = np.array([e_ @ np.linalg.solve(P_, e_) for e_, P_ in zip(err, T["P"])])
-            dr_err = T["true"] - T["dr"]; dr_err[:, 2] = wrap(dr_err[:, 2])
-            ref_err = np.hypot(*(T["true"][:, :2] - T["ref"][:, :2]).T)
-            u = T["u"]
-            res.update(log=T, nees=nees,
-                       rmse_pos=float(np.sqrt(np.mean(np.sum(err[:, :2] ** 2, 1)))),
-                       rmse_head=float(np.sqrt(np.mean(err[:, 2] ** 2))),
-                       rmse_pos_dr=float(np.sqrt(np.mean(np.sum(dr_err[:, :2] ** 2, 1)))),
-                       track_rmse=float(np.sqrt(np.nanmean(ref_err ** 2))),
-                       effort=float(np.mean(u[:, 0] ** 2 + u[:, 1] ** 2)),
-                       nees_mean=float(nees.mean()), grid=grid.occupied())
-        return res
+            # ---------- Camera ----------
+            if step % C.CAM_EVERY == 0:
+                observation, n_visible = _camera_pose(
+                    world, cfg
+                )
+
+                if not localised:
+                    if observation is not None:
+                        last_detection = world.t
+
+                        if confirmation_start is None:
+                            confirmation_start = world.t
+                            observations.clear()
+
+                        if (
+                            world.t - confirmation_start
+                            >= settle_time
+                        ):
+                            observations.append(observation)
+
+                            if len(observations) >= required_samples:
+                                confirmed = _confirmed_pose(
+                                    observations
+                                )
+
+                                if confirmed is not None:
+                                    pose, covariance = confirmed
+
+                                    ekf.initialise_dock(
+                                        pose, covariance
+                                    )
+
+                                    localised = True
+                                    acquisition_time = world.t
+                                    last_fix = world.t
+
+                                    dead_reckoning = ekf.x.copy()
+
+                                    # Start a fresh map in the dock frame.
+                                    grid = OccGrid()
+                                    ranges = world.lidar()
+                                    grid.update(ekf.x, ranges)
+
+                                    if log:
+                                        print(
+                                            f"Dock frame acquired at "
+                                            f"{world.t:.2f}s: "
+                                            f"{np.round(ekf.x, 3)}",
+                                            flush=True,
+                                        )
+                                else:
+                                    observations.pop(0)
+
+                else:
+                    valid = int(observation is not None)
+                    accepted = False
+
+                    if observation is not None:
+                        accepted = ekf.update_pose(
+                            observation.pose,
+                            observation.covariance,
+                        )
+
+                    ekf.end_frame(valid, int(accepted))
+
+                    if accepted:
+                        last_fix = world.t
+
+            # ---------- Choose movement ----------
+            error = np.zeros(3)
+            command = (0.0, cfg.search_w)
+
+            if not localised:
+                if world.t >= cfg.search_timeout:
+                    reason = "marker_not_found"
+                    break
+
+                if (
+                    confirmation_start is not None
+                    and world.t - last_detection < 0.5
+                ):
+                    phase = "confirm"
+                    command = (0.0, 0.0)
+                else:
+                    phase = "search"
+                    confirmation_start = None
+                    observations.clear()
+
+            elif world.t - last_fix > cfg.marker_lost_timeout:
+                phase = "reacquire"
+
+                if (
+                    world.t - last_fix
+                    > cfg.marker_lost_timeout + cfg.search_timeout
+                ):
+                    reason = "marker_lost"
+                    break
+
+            else:
+                distance = np.linalg.norm(
+                    ekf.x[:2] - C.DOCK_TARGET[:2]
+                )
+                heading_error = float(
+                    wrap(C.DOCK_TARGET[2] - ekf.x[2])
+                )
+
+                if distance < 0.025:
+                    phase = "align"
+
+                    command = (
+                        0.0,
+                        float(np.clip(
+                            1.5 * heading_error,
+                            -0.5,
+                            0.5,
+                        )),
+                    )
+
+                    if abs(heading_error) < np.deg2rad(3.0):
+                        hold += 1
+                    else:
+                        hold = 0
+
+                    if hold >= 20:
+                        reason = "docked"
+                        break
+
+                else:
+                    phase = "navigate"
+                    hold = 0
+
+                    in_approach = (
+                        ekf.x[0] < C.DOCK_APPROACH[0] + 0.15
+                        and abs(ekf.x[1]) < 0.15
+                    )
+
+                    replan_due = (
+                        force_replan
+                        or step - last_plan >= REPLAN_STEPS
+                    )
+
+                    if (
+                        tracker.traj is None
+                        or (not in_approach and replan_due)
+                    ):
+                        trajectory = _plan(grid, ekf.x, cfg)
+
+                        last_plan = step
+                        plans += 1
+                        force_replan = False
+
+                        if trajectory is not None:
+                            tracker.set_trajectory(trajectory)
+
+                        elif tracker.traj is None:
+                            reason = "no_path"
+                            break
+
+                    command, error = tracker.command(ekf.x)
+
+            # ---------- Move and predict ----------
+            odometry = world.step(*command)
+
+            ekf.predict(odometry)
+
+            dead_reckoning = f_motion(
+                dead_reckoning,
+                odometry,
+                C.DT,
+            )
+
+            # ---------- LiDAR ----------
+            if (step + 1) % C.LIDAR_EVERY == 0:
+                ranges = world.lidar()
+
+                if localised:
+                    grid.update(ekf.x, ranges)
+
+                    if tracker.traj is not None:
+                        blocked = inflated_map(
+                            grid, cfg.inflate
+                        )
+
+                        remaining = tracker.traj[
+                            tracker.idx::5, :2
+                        ]
+
+                        ix, iy = grid.to_cell(
+                            remaining[:, 0],
+                            remaining[:, 1],
+                        )
+
+                        force_replan = bool(
+                            blocked[ix, iy].any()
+                        )
+
+            # Older backends display sensing inside world.step().
+            if callable(present_sensors):
+                present_sensors(
+                    ekf.x, phase, localised
+                )
+
+            if log:
+                _record(
+                    data, world, ekf, dead_reckoning,
+                    tracker, localised, phase,
+                    command, error, n_visible,
+                )
+
+        return _results(
+            seed, cfg, world, ekf, grid, data,
+            reason, acquisition_time, plans, phase,
+        )
+
     finally:
         world.close()

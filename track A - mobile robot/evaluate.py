@@ -30,7 +30,7 @@ def diagnose(r):
         return "collision"
     if r["reason"] != "docked":
         return r["reason"]
-    if r["rmse_pos"] > 0.3:
+    if r.get("rmse_pos", float("nan")) > 0.3:
         return "estimator lost"
     return "dock tolerance"
 
@@ -38,7 +38,7 @@ def diagnose(r):
 def summarise(name, R):
     n = len(R); k = sum(r["success"] for r in R)
     lo, hi = wilson(k, n)
-    ne = np.concatenate([r["nees"] for r in R])
+    ne = np.concatenate([r["nees"][r["log"]["frame"] == "dock"] for r in R])
     return dict(name=name, n=n, succ=k / n, lo=lo, hi=hi,
                 dock_med=np.median([r["dock_pos_err"] for r in R]) * 100,
                 dock_max=np.max([r["dock_pos_err"] for r in R]) * 100,
@@ -46,7 +46,7 @@ def summarise(name, R):
                 time=np.mean([r["time"] for r in R]),
                 rmse=np.mean([r["rmse_pos"] for r in R]) * 100,
                 rmse_dr=np.mean([r["rmse_pos_dr"] for r in R]) * 100,
-                nees_med=np.median(ne), nees_in=np.mean(ne < 7.81),
+                nees_med=np.median(ne) if len(ne) else float("nan"), nees_in=np.mean(ne < 7.81) if len(ne) else float("nan"),
                 track=np.mean([r["track_rmse"] for r in R]) * 100,
                 effort=np.mean([r["effort"] for r in R]),
                 coll=sum(r["collided"] for r in R),
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     # (a MuJoCo trial takes about 20 s, the full ablation set would take hours). No arguments = original behaviour.
     if len(sys.argv) > 1 and sys.argv[1] == "mujoco":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
-        base = Cfg(backend="mujoco")
+        base = Cfg()
         rows = [summarise(name, run(name, cfg, range(1000, 1000 + n))) for name, cfg in
                 [("MuJoCo baseline", base), ("MuJoCo, 6 N push at 12 s", replace(base, push_time=12.0))]]
         with open(C.RESULTS_DIR / "summary_mujoco.md", "w") as f:
@@ -86,8 +86,6 @@ if __name__ == "__main__":
         ("innovation gate off", replace(base, gate=None)),
         ("calibration error fx +5%", replace(base, fx_filter=530.0 * 1.05)),
         ("calibration error fx -5%", replace(base, fx_filter=530.0 * 0.95)),
-        ("narrow camera FOV (30 deg)", replace(base, cam_fov_deg=30.0)),
-        ("wheel slip bias +/-5% (stress)", replace(base, extra_disturbance=0.05)),
         ("7 obstacles (stress)", replace(base, n_obstacles=7)),
     ]
     results, rows = {}, []
@@ -142,3 +140,4 @@ if __name__ == "__main__":
     ax[1].semilogx([rs for rs, _ in lqr_rows], [s["succ"] * 100 for _, s in lqr_rows], "o-")
     ax[1].set_xlabel("R scale"); ax[1].set_ylabel("success [%]")
     plt.tight_layout(); fig.savefig(C.RESULTS_DIR / "lqr_tradeoff.png", dpi=130); plt.close(fig)
+

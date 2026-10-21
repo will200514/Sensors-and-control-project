@@ -7,9 +7,11 @@ BEAM_ANGLES = np.linspace(-np.pi, np.pi, C.LIDAR_BEAMS, endpoint=False)
 
 class OccGrid:
     """Log-odds occupancy grid, 5 cm cells over the room, updated with ranges + estimated pose."""
-    def __init__(self, res=0.05, l_occ=0.9, l_free=-0.4, clamp=5.0):
+    def __init__(self, res=0.05, l_occ=0.9, l_free=-0.4, clamp=5.0, bounds=C.LOCAL_MAP_BOUNDS):
         self.res = res
-        xmin, xmax, ymin, ymax = C.ROOM
+        self.bounds = bounds
+        xmin, xmax, ymin, ymax = bounds
+        self.xmin, self.ymin = xmin, ymin
         self.n = int(round((xmax - xmin) / res))
         self.m = int(round((ymax - ymin) / res))
         self.L = np.zeros((self.n, self.m))
@@ -17,8 +19,11 @@ class OccGrid:
         self.steps = np.arange(0.0, C.LIDAR_MAX, res * 0.5)
 
     def to_cell(self, x, y):
-        return (np.clip((np.asarray(x) / self.res).astype(int), 0, self.n - 1),
-                np.clip((np.asarray(y) / self.res).astype(int), 0, self.m - 1))
+        return (np.clip(np.floor((np.asarray(x) - self.xmin) / self.res).astype(int), 0, self.n - 1),
+                np.clip(np.floor((np.asarray(y) - self.ymin) / self.res).astype(int), 0, self.m - 1))
+
+    def cell_to_world(self, i, j):
+        return self.xmin + (i + 0.5) * self.res, self.ymin + (j + 0.5) * self.res
 
     def update(self, pose_est, ranges):
         px, py, th = pose_est
@@ -37,3 +42,4 @@ class OccGrid:
 
     def occupied(self):
         return self.L > 0.5
+
