@@ -1,4 +1,4 @@
-"""Generate the two-marker MuJoCo room: python tools/make_room.py."""
+"""Generate the single-marker MuJoCo room: python tools/make_room.py."""
 import sys
 from pathlib import Path
 import numpy as np
@@ -23,7 +23,7 @@ def marker(j, x, y, facing):
     cell = C.MARKER_L / 6
     n = np.array([np.cos(facing), np.sin(facing)])          # out of the wall
     t = np.array([-n[1], n[0]])                             # along the wall (viewer's right)
-    q, z = yaw_quat(facing), C.CAM_HEIGHT
+    q, z = yaw_quat(facing), C.MARKER_HEIGHT
     p = np.array([x, y]) + 0.002 * n
     g = [f'<geom name="marker{j}_backing" type="box" size="0.001 {4*cell:.4f} {4*cell:.4f}" pos="{p[0]:.4f} {p[1]:.4f} {z}" quat="{q}" rgba="1 1 1 1" contype="0" conaffinity="0"/>']
     for r in range(6):
@@ -36,17 +36,21 @@ def marker(j, x, y, facing):
 
 
 def room_xml():
-    geoms = [  # walls (contact group 2, like the robot body)
-        '<geom type="box" size="2.6 0.05 0.35" pos="2.5 -0.05 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
-        '<geom type="box" size="2.6 0.05 0.35" pos="2.5 5.05 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
-        '<geom type="box" size="0.05 2.6 0.35" pos="-0.05 2.5 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
-        '<geom type="box" size="0.05 2.6 0.35" pos="5.05 2.5 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
+    geoms = [
+        '<geom type="box" size="1.6 0.05 0.35" pos="1.5 -0.05 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
+        '<geom type="box" size="1.6 0.05 0.35" pos="1.5 3.05 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
+        '<geom type="box" size="0.05 1.6 0.35" pos="-0.05 1.5 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
+        '<geom type="box" size="0.05 1.6 0.35" pos="3.05 1.5 0.35" rgba=".86 .86 .82 1" contype="2" conaffinity="2"/>',
     ]
-    for j, (x, y, facing) in enumerate(C.MARKERS):
+    for j, (x, y, facing) in zip([C.DOCK_MARKER_ID], C.MARKERS):
         geoms += marker(j, x, y, facing)
     # green charging station under the dock marker (visual only)
     dx, dy, _ = C.DOCK_MARKER
-    geoms.append(f'<geom type="box" size="0.04 0.12 0.03" pos="{dx - 0.04} {dy} 0.03" rgba="0.1 0.6 0.25 1" contype="0" conaffinity="0"/>')
+    geoms.append(
+        f'<geom type="box" size="0.04 0.12 0.001" '
+        f'pos="{dx - 0.04} {dy} 0.001" '
+        f'rgba="0.1 0.6 0.25 1" contype="0" conaffinity="0"/>'
+    )
     obst = "\n".join(f'    <body name="obst{i}" pos="0 0 -5"><geom name="obst{i}" type="cylinder" size="0.2 0.2" pos="0 0 0.2" '
                      f'rgba="0.55 0.35 0.2 1" contype="2" conaffinity="2"/></body>' for i in range(N_OBST))
     body = "\n".join("    " + g for g in geoms)
@@ -62,12 +66,12 @@ def room_xml():
     <texture type="skybox" builtin="gradient" rgb1="0.75 0.8 0.85" rgb2="0.35 0.4 0.45" width="512" height="3072"/>
     <texture type="2d" name="floor" builtin="checker" rgb1="0.46 0.46 0.46" rgb2="0.41 0.41 0.41" width="300" height="300"/>
     <material name="floor" texture="floor" texrepeat="10 10"/>
-  </asset>
+    </asset>
   <worldbody>
-    <light pos="2.5 2.5 4" dir="0 0 -1" directional="true" diffuse="0.5 0.5 0.5" castshadow="false"/>
-    <geom name="floor" type="plane" size="2.5 2.5 0.05" pos="2.5 2.5 0" material="floor"/>
     <!-- overview camera for demos; the robot's own camera is "cam" in the robot file -->
-    <camera name="overview" pos="2.5 -1.0 5.2" xyaxes="1 0 0 0 0.837 0.547" fovy="52"/>
+    <light pos="1.5 1.5 4" dir="0 0 -1" directional="true" diffuse="0.5 0.5 0.5" castshadow="false"/>
+    <geom name="floor" type="plane" size="1.5 1.5 0.05" pos="1.5 1.5 0" material="floor"/>
+    <camera name="overview" pos="1.5 -0.7 3.3" xyaxes="1 0 0 0 0.83205 0.55470" fovy="52"/>
 {body}
 {obst}
   </worldbody>

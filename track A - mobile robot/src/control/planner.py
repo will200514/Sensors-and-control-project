@@ -1,17 +1,22 @@
-"""Global planning on the LiDAR occupancy grid (A*) and trajectory generation."""
+"""Global planning on the LiDAR occupancy grid (A*) and trajectory generation.
+turns the LiDAR occupancy map into a route, then adds the headings and speeds needed by the LQR controller."""
 import heapq
 import numpy as np
 from scipy.ndimage import distance_transform_edt
 from .. import config as C
 
-
+# adds obstacle clearence
+# it allows the model to treat the robot as a point, while creating greater clearence around the objects
+# to allows room for the objects body to clear
 def inflated_map(grid, inflate):
-    occ = grid.occupied().copy()
-    occ[0, :] = occ[-1, :] = occ[:, 0] = occ[:, -1] = True          # room boundary is known
+    occ = grid.occupied()
+    occ[0, :] = occ[-1, :] = occ[:, 0] = occ[:, -1] = True          # finite map extent only, not simulator room geometry
     dist = distance_transform_edt(~occ) * grid.res
     return dist < inflate
 
 
+# finds a route 
+# A serches for a low cost route between the start and the desired destination
 def astar(blocked, grid, start_xy, goal_xy):
     s = tuple(int(c) for c in grid.to_cell(*start_xy))
     g = tuple(int(c) for c in grid.to_cell(*goal_xy))
@@ -31,7 +36,7 @@ def astar(blocked, grid, start_xy, goal_xy):
             path = [cur]
             while cur in came:
                 cur = came[cur]; path.append(cur)
-            return [((i + 0.5) * grid.res, (j + 0.5) * grid.res) for i, j in path[::-1]]
+            return [grid.cell_to_world(i, j) for i, j in path[::-1]]
         for di, dj, c in nbrs:
             n = (cur[0] + di, cur[1] + dj)
             if not (0 <= n[0] < grid.n and 0 <= n[1] < grid.m) or blocked[n]:
@@ -45,6 +50,9 @@ def astar(blocked, grid, start_xy, goal_xy):
     return None
 
 
+
+# checks a straight connection
+# checks wether a straight section connect two points without entering a blocked cell
 def _free_line(blocked, grid, p, q):
     n = max(int(np.linalg.norm(np.array(q) - np.array(p)) / (grid.res / 2)), 2)
     xs, ys = np.linspace(p[0], q[0], n), np.linspace(p[1], q[1], n)
@@ -52,6 +60,8 @@ def _free_line(blocked, grid, p, q):
     return not blocked[ix, iy].any()
 
 
+
+# removes unnesesary intermediate points
 def shortcut(path, blocked, grid):
     out, i = [path[0]], 0
     while i < len(path) - 1:
@@ -62,6 +72,7 @@ def shortcut(path, blocked, grid):
     return np.array(out)
 
 
+# rounds the paths cornrs
 def chaikin(P, iters=3):
     for _ in range(iters):
         Q = [P[0]]
@@ -70,17 +81,20 @@ def chaikin(P, iters=3):
         Q.append(P[-1]); P = np.array(Q)
     return P
 
-
+# choses a path smoothing level
 def smooth_path(pts, blocked, grid):
     pts = np.array(pts, float)
     for it in (3, 2, 1, 0):
-        sm = chaikin(pts, it) if it else pts
+        sm = chaikin(pts, it) 
         ix, iy = grid.to_cell(sm[:, 0], sm[:, 1])
         if not blocked[ix, iy].any():
             return sm
     return pts
 
 
+
+# adds heading and reference speeds
+# 
 def make_trajectory(P, v_ref, v_end, dt=C.DT, a_dec=0.08, v_floor=0.04):
     """Time-parameterise a polyline: trapezoid-style speed profile, w_ref from path curvature."""
     P = np.array(P, float)
@@ -105,4 +119,5 @@ def make_trajectory(P, v_ref, v_end, dt=C.DT, a_dec=0.08, v_floor=0.04):
     k = 5                                                    # light smoothing of omega_ref
     w = np.convolve(np.pad(w, k, mode="edge"), np.ones(2 * k + 1) / (2 * k + 1), mode="valid")
     return np.column_stack([X[:, 0], X[:, 1], X[:, 2], X[:, 3], w])   # x, y, th, v_r, w_r
+
 

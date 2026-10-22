@@ -38,13 +38,14 @@ def body_to_wheels(v, w, b=TRACK):
 def _sinc_half(w, dt):
     """sin(a)/a with a = w dt / 2, and its derivative with respect to w."""
     a = 0.5 * w * dt
-    if abs(a) < 1e-4:
-        s = 1.0 - a * a / 6.0
+    if abs(a) < 1e-4:             #small angle approximation (ensures a doesnt equal 0 on denominator)
+        s = 1.0 - a * a / 6.0     
         ds_da = -a / 3.0
-    else:
+    else:                         #regular circular arc equation for not-small angles
         s = np.sin(a) / a
         ds_da = (a * np.cos(a) - np.sin(a)) / (a * a)
-    return s, ds_da * 0.5 * dt
+    return s, ds_da * 0.5 * dt    # returns curvred motion correction s, used in G_motion function
+
 
 # used to predicts the robots next pose
 # this is the acutal non linear movement model 
@@ -56,13 +57,14 @@ def f_motion(x, u, dt):
     in a form that has no singularity at omega = 0)."""
     v, w = u
     s, _ = _sinc_half(w, dt)
-    thm = x[2] + 0.5 * w * dt
-    return np.array([x[0] + v * dt * s * np.cos(thm),
+    thm = x[2] + 0.5 * w * dt           #curved motion correction
+    return np.array([x[0] + v * dt * s * np.cos(thm),     #returns next pose, used in EFK.predict() and model.py
                      x[1] + v * dt * s * np.sin(thm),
                      float(wrap(x[2] + w * dt))])
 
+
 # defines how uncertainty in the current pose affects the next pose
-# calculates the sensitivity to the current pose
+# calculates the sensitivity to the current pose errors
 # includes x and y position errors and heading errors
 # ekf uses this to propogate pose covariance
 def F_motion(x, u, dt):
@@ -77,6 +79,7 @@ def F_motion(x, u, dt):
 
 
 
+# snesitivity to odometry errors
 # defines how uncertainty in speed affects the next pose
 # calculate the snesitivity to speed inputs
 # Together, F and G describe small prediction errors: xnext = Fx + Gu
@@ -92,6 +95,8 @@ def G_motion(x, u, dt):
     G[1, 1] = v * dt * (ds_dw * np.sin(thm) + s * 0.5 * dt * np.cos(thm))
     G[2, 1] = dt
     return G
+# used in EKF along with F_motion
+
 
 
 #---------------------------------------------------------------------------
@@ -117,7 +122,7 @@ def error_model(v_r, w_r):
     B = np.array([[-1.0, 0.0],
                   [0.0, 0.0],
                   [0.0, -1.0]])
-    return A, B
+    return A, B        # LQRTracker.gain() calls it before discretising the model and calculating a gain.
 
 # converts the contnuous model into a discrete model
 # controller runs in steps so it needs a discrete not continuous model for LQR
