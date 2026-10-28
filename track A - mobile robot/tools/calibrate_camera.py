@@ -1,8 +1,6 @@
-"""
-Introusive calibration (internal mesured by robot) not extrusive: camera offset, lidar distance on robot/ external truths.
+"""Calibrate the robot's MuJoCo camera with a checkerboard (Part B):  python tools/calibrate_camera.py
 
-Calibrate the robot's MuJoCo camera with a checkerboard (Part B):  python tools/calibrate_camera.py
-
+Intrusive calibration (measured by the robot, cam focal point ect) not extrusive: (cam and lidar offset, robo height real world truth)
 Shows the camera the board in 30 random poses, finds the corners, runs cv2.calibrateCamera,
 and compares the result with the true focal length set by the camera's fovy.
 Corner finding and the 9 x 6 / 25 mm board are from the Week 3 tutorial (measured_corners, Part C).

@@ -1,4 +1,7 @@
-"""Run MuJoCo and save diagnostic plots. macOS: mjpython main.py --seed 3."""
+"""Run MuJoCo and save diagnostic plots. macOS: mjpython main.py --seed n.
+main.py is the entry point for the simulation. It starts a trial, prints the results, and saves plots showing how the robot performed.
+
+The robots navigation decisions happen in mission.py and the modules it calls. main.py brings those parts together and presents the results."""
 import argparse
 import numpy as np
 import matplotlib

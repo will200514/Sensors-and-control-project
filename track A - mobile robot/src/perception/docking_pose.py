@@ -5,6 +5,10 @@ B: robot x forward, y left, z up. C: OpenCV x right, y down, z forward.
 M: printed marker x right, y up, z out of its front face.
 T_A_B maps coordinates from B into A. No simulation coordinates enter this file.
 Assumes a level robot, an upright marker, and the calibrated rigid camera mount.
+
+converts the markers 4 corners into the robot pose expressed relative to the docking marker, 
+with the uncertainty of that measurement
+conncection between aruco etector and EKF
 """
 from dataclasses import dataclass
 import cv2
@@ -14,50 +18,72 @@ from .. import config as C
 from ..model.diffdrive import wrap
 
 
+
+
+# packages the results, i.e. acts as a data container rather than a calculation fuction
 @dataclass
 class PoseObservation:
     pose: np.ndarray
     covariance: np.ndarray
     reprojection_px: float
 
-
+# creates the poition and orientation transform for frames
 def transform(R, t):
     T = np.eye(4)
     T[:3, :3], T[:3, 3] = R, t
     return T
 
-
+# describes the camera mounting
+# converts camer coordinates into robot body coordinates
 def body_camera_transform():
     return transform(np.array([[0., 0., 1.], [-1., 0., 0.], [0., -1., 0.]]),
                      [C.CAM_OFFSET, 0., C.CAM_HEIGHT])
 
 
+# describes the marker in the docking frame
+# converts the aruco markers coordinates into the docking frame coordinates
 def dock_marker_transform():
     return transform(np.array([[0., 0., 1.], [1., 0., 0.], [0., 1., 0.]]),
                      [0., 0., C.MARKER_HEIGHT])
 
 
+
+# defines the physical squere
+# provides known physical coordinates of the markers corners
 def marker_corners():
     h = C.MARKER_L / 2
     # Required ordering for SOLVEPNP_IPPE_SQUARE.
     return np.array([[-h, h, 0.], [h, h, 0.], [h, -h, 0.], [-h, -h, 0.]])
 
 
+
+# descibes ther cameras internal geometry
+# includes focal length in pixels, horizontal principle point, verticle principle point
 def camera_matrix(fx=C.FX):
     return np.array([[fx, 0., C.CX_PX], [0., fx, C.CY_PX], [0., 0., 1.]])
 
 
+
+# predicts what the marker should look like
+# i.e if the robot was at this pose relative to the marker, where should the corners appear in the image
 def project_corners(pose, fx=C.FX):
     """Forward model: predicted four pixel corners for a robot pose in D."""
     x, y, th = pose
     c, s = np.cos(th), np.sin(th)
-    T_D_B = transform(np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]]), [x, y, 0.])
-    T_C_M = np.linalg.inv(T_D_B @ body_camera_transform()) @ dock_marker_transform()
+    T_D_B = transform(np.array([[c, -s, 0.], [s, c, 0.], [0., 0., 1.]]), [x, y, 0.])  # camera pose in docking frame
+    T_C_M = np.linalg.inv(T_D_B @ body_camera_transform()) @ dock_marker_transform()  # calculates the marker pose relative to the camera
     rvec = cv2.Rodrigues(T_C_M[:3, :3])[0]
-    return cv2.projectPoints(marker_corners(), rvec, T_C_M[:3, 3], camera_matrix(fx),
+    return cv2.projectPoints(marker_corners(), rvec, T_C_M[:3, 3], camera_matrix(fx),  # projects the physical corners into pixels
                              np.array(C.CAM_DISTORTION))[0].reshape(4, 2)
 
 
+# calculates the measured robot pose
+# 1. checks the detected corners
+# 2. generates possible marker poses
+# 3. convert them into robot poses
+# 4. refine using floor constraint
+# 5. select the best fit
+# 6. calculates the measurement uncertainty
 def estimate_dock_pose(corners, cfg):
     """PnP initial candidates, then a level-floor reprojection fit using all corners.
 
@@ -73,7 +99,7 @@ def estimate_dock_pose(corners, cfg):
     if edges.min() < 6.0:
         return None
     try:
-        result = cv2.solvePnPGeneric(marker_corners(), pixels, camera_matrix(cfg.fx_filter),
+        result = cv2.solvePnPGeneric(marker_corners(), pixels, camera_matrix(cfg.fx_filter),     # estimates the markers otation and translation elative to the camera
                                     np.array(C.CAM_DISTORTION), flags=cv2.SOLVEPNP_IPPE_SQUARE)
     except cv2.error:
         return None

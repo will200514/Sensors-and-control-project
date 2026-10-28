@@ -3,14 +3,14 @@
 import numpy as np
 from .. import config as C
 
-
+# allows seeds to reporoduce a layout
 def sample_scenario(rng, cfg):
     if not 0 <= cfg.n_obstacles <= 8:
         raise ValueError("n_obstacles must be between 0 and 8 (room slots).")
     start = np.array([
         rng.uniform(0.35, 0.8),
         rng.uniform(2.05, 2.6),
-        0.0,
+        -np.pi/2,
     ])
 
     lead_end = C.DOCK_POSE[:2]

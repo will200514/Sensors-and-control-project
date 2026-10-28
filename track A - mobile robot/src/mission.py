@@ -35,6 +35,9 @@ from .evaluation_frames import (
 REPLAN_STEPS = 100
 
 
+
+# constructs a docking trajectory
+# finds a route the the approach point
 def _plan(grid, pose, cfg):
     """Plan to the marker-relative approach, then towards the dock."""
     blocked = inflated_map(grid, cfg.inflate)
@@ -67,6 +70,9 @@ def _plan(grid, pose, cfg):
     )
 
 
+
+# obtains a usable camera observation
+
 def _camera_pose(world, cfg):
     """Return one docking-marker pose and the detection count."""
     detections = world.camera()
@@ -79,6 +85,9 @@ def _camera_pose(world, cfg):
     return None, len(detections)
 
 
+
+# checks the start up measurements 
+# This prevents the robot from defining its docking frame from just one potentially noisy image.
 def _confirmed_pose(observations):
     """Combine agreeing stationary observations without overconfidence."""
     poses = np.array([obs.pose for obs in observations])
@@ -117,7 +126,7 @@ def _confirmed_pose(observations):
 
     return pose, covariance
 
-
+# This function records the information needed for your plots. It does not calculate movement commands.
 def _record(
     data,
     world,
@@ -181,7 +190,7 @@ def _record(
     for name, value in sample.items():
         data.setdefault(name, []).append(value)
 
-
+# evaluates completed trial, This function runs after the control loop ends.
 def _results(
     seed,
     cfg,
@@ -259,15 +268,7 @@ def _results(
         "sensor_snapshots": {},
     }
 
-    # Supports the separate sensing display in the newer backend.
-    sensing_image = getattr(world, "sensing_image", None)
-
-    if callable(sensing_image):
-        result["sensor_image"] = sensing_image(
-            ekf.x,
-            phase,
-            acquisition_time is not None,
-        )
+    
 
     if not data:
         return result
@@ -333,6 +334,19 @@ def _results(
     return result
 
 
+
+# runs the mission
+# 1. Create the simulation and processing objects
+# 2. Initialise mission state
+# 3. Run the timed loop
+# 4. Search for the marker
+# 5. Stop and confirm - When a usable observation appears, the mission records when confirmation began.
+# 6. Establish the docking frame
+# 7. Apply later camera corrections
+# 8. Reacquire a lost marker
+# 9. Move, predict and map - applies the command, obtains wheel odometry and predicts the next pose.
+# 10. Finish and release resources
+
 def run_trial(seed, cfg=None, log=True):
     cfg = cfg or Cfg()
     rng = np.random.default_rng(seed)
@@ -380,9 +394,7 @@ def run_trial(seed, cfg=None, log=True):
             cfg, "acquisition_settle_time", 0.3
         )
 
-        present_sensors = getattr(
-            world, "present_sensors", None
-        )
+        
 
         if log:
             print(
@@ -604,11 +616,7 @@ def run_trial(seed, cfg=None, log=True):
                             blocked[ix, iy].any()
                         )
 
-            # Older backends display sensing inside world.step().
-            if callable(present_sensors):
-                present_sensors(
-                    ekf.x, phase, localised
-                )
+            
 
             if log:
                 _record(
