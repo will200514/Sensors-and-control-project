@@ -79,13 +79,6 @@ class Cfg:
     # estimator
     use_camera: bool = True
     q_scale: float = 4.0            # multiplies the derived process covariance
-<<<<<<< HEAD
-    r_scale: float = 1.0            # multiplies the derived camera covariance
-    gate: float = 9.21              # chi2(2) 99% innovation gate (None = off)
-    fx_filter: float = FX           # focal length the filter believes (calibration error ablation)
-    p0_pos: float = 0.5
-    p0_head_deg: float = 10
-=======
     r_scale: float = 2.0            # multiplies the derived camera covariance
     gate: float = 11.345            # chi2(3) 99% full-pose innovation gate (None = off)
     fx_filter: float = FX           # focal length the filter believes (calibration error ablation)
@@ -99,7 +92,6 @@ class Cfg:
     camera_pos_floor: float = 0.015
     camera_head_floor_deg: float = 1.0
     max_reprojection_px: float = 2.0
->>>>>>> 3b98b09 (added cam and lidar markers, origin starts at robot then moves to aruco marker, smaller room, less obstacles)
     # controller (Bryson's rule: Q = 1/e_max^2, R = 1/u_max^2)
     e_max: tuple = (0.05, 0.05, 0.10)   # x [m], y [m], theta [rad]
     u_max: tuple = (0.05, 0.5)          # delta v [m/s], delta omega [rad/s]
