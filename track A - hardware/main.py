@@ -1,6 +1,8 @@
 """Hardware-only TurtleBot docking entry point."""
+" python main.py --robot-ip 192.168.1.206 "
 import argparse
 from src.hardware_mission import run_hardware
+
 
 
 def main():

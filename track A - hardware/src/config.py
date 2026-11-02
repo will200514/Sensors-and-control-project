@@ -20,7 +20,7 @@ MAX_TIME = 180.0          # Trial timeout [s]
 
 # TurtleBot3 platform
 TRACK = 0.286             # Distance between drive wheels [m]
-ROBOT_RADIUS = 0.20      # Approximate footprint radius [m]
+ROBOT_RADIUS = 0.25      # Approximate footprint radius [m]
 WHEEL_RADIUS = 0.033      # Wheel radius [m]
 
 V_MAX = 0.20              # Maximum commanded forward speed [m/s]
@@ -46,7 +46,7 @@ MARKERS = np.array([
 ])
 
 DOCK_MARKER = MARKERS[-1]
-DOCK_STANDOFF = 0.30       # Robot-centre stopping distance [m]
+DOCK_STANDOFF = 0.20       # Robot-centre stopping distance [m]
 
 DOCK_POSE = np.array([
     DOCK_MARKER[0] - DOCK_STANDOFF,
@@ -65,8 +65,8 @@ DOCK_TOL_HEAD = np.deg2rad(5.0)
 
 # Camera calibration and mounting
 # Simulation values. On hardware these are replaced by load_hardware_calibration().
-FX = 530.0
-FY = 530.0
+FX = 1169.8
+FY = 1170.9
 CX_PX = 320.0
 CY_PX = 240.0
 CAM_IMAGE_SIZE = (640, 480)   # width, height
@@ -75,8 +75,8 @@ CAM_IMAGE_SIZE = (640, 480)   # width, height
 CAM_DISTORTION = (0.0, 0.0, 0.0, 0.0, 0.0)
 
 MARKER_L = 0.20           # Printed marker side length [m]
-CAM_OFFSET = 0.06         # Camera ahead of robot origin [m]
-CAM_HEIGHT = 0.12         # Camera optical-centre height [m]
+CAM_OFFSET = 0.08         # Camera ahead of robot origin [m]
+CAM_HEIGHT = 0.104         # Camera optical-centre height [m]
 MARKER_HEIGHT = 0.12      # Marker-centre height [m]
 CAM_PITCH_DEG = 0.0       # Camera tilt, positive = looking down [deg]
 
@@ -145,7 +145,7 @@ DOCK_TARGET = np.array([
     np.pi,
 ])
 
-DOCK_APPROACH = np.array([1.0, 0.0])
+DOCK_APPROACH = np.array([0.5, 0.0])
 
 # Computational map extent, not a known map of the room.
 LOCAL_MAP_BOUNDS = (-8.0, 8.0, -8.0, 8.0)

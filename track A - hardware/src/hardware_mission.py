@@ -291,7 +291,7 @@ def run_hardware(
     # planned route on wheel odometry. Later marker sightings do not move the
     # pose estimate, so the estimate (and the robot) no longer jumps when the
     # camera pose is noisy, and losing sight of the marker does not matter.
-    cfg.fuse_camera_after_lock = False
+    cfg.fuse_camera_after_lock = True
     cfg.lookahead = 0.30              # steer for a point 30 cm along the path
     cfg.turn_in_place_enter = 0.70    # spin in place above ~40 deg ...
     cfg.turn_in_place_exit = 0.20     # ... until within ~11 deg, then drive
