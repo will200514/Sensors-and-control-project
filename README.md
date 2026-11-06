@@ -18,6 +18,7 @@ Group composition:
 - Yani Hickey Berry
 - Will Munro
 - Pauras Londhe
+- Mahmoud Abdallah
 
 ## Install info
 Python 3.12, tested with MuJoCo 3.10.0 and OpenCV 4.x.
@@ -52,4 +53,4 @@ Quick evaluation (baseline and push-disturbance trials):
 ```bash
 python evaluate.py mujoco 1
 ```
-Running `python evaluate.py` with no arguments runs the full sweep and takes a long time.
+`python evaluate.py mujoco 20` reproduces the 20-seed baseline and push results on the project page. Running `python evaluate.py` with no arguments runs the full sweep and takes a long time.
