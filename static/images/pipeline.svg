@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" font-family="Noto Sans, Arial, sans-serif" font-size="15">
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#363636"/></marker></defs>
+  <rect width="960" height="300" fill="#fff"/>
+  <g stroke="#363636" stroke-width="1.5">
+    <rect x="20" y="30" width="150" height="56" rx="8" fill="#eef5ff"/>
+    <rect x="20" y="122" width="150" height="56" rx="8" fill="#eef5ff"/>
+    <rect x="20" y="214" width="150" height="56" rx="8" fill="#eef5ff"/>
+    <rect x="230" y="30" width="170" height="56" rx="8" fill="#fff6e5"/>
+    <rect x="230" y="214" width="170" height="56" rx="8" fill="#fff6e5"/>
+    <rect x="440" y="100" width="210" height="100" rx="8" fill="#ffecec"/>
+    <rect x="690" y="30" width="150" height="56" rx="8" fill="#eaf7ea"/>
+    <rect x="690" y="122" width="150" height="56" rx="8" fill="#eaf7ea"/>
+    <rect x="690" y="214" width="150" height="56" rx="8" fill="#f2f2f2"/>
+  </g>
+  <g text-anchor="middle" fill="#222">
+    <text x="95" y="54">Camera</text><text x="95" y="74" font-size="12">640x480, 10 Hz</text>
+    <text x="95" y="146">Wheel encoders</text><text x="95" y="166" font-size="12">odometry, 20 Hz</text>
+    <text x="95" y="238">2D LiDAR</text><text x="95" y="258" font-size="12">120 beams, 5 Hz</text>
+    <text x="315" y="54">ArUco ID 1 + PnP</text><text x="315" y="74" font-size="12">pose + covariance</text>
+    <text x="315" y="238">Occupancy grid</text><text x="315" y="258" font-size="12">dock frame</text>
+    <text x="545" y="140" font-weight="bold">EKF</text><text x="545" y="162" font-size="12">state [x, y, theta]</text><text x="545" y="180" font-size="12">odometry predict, camera update</text>
+    <text x="765" y="54">Planner</text><text x="765" y="74" font-size="12">path to dock</text>
+    <text x="765" y="146">LQR tracker</text><text x="765" y="166" font-size="12">uses estimate only</text>
+    <text x="765" y="238">TurtleBot3</text><text x="765" y="258" font-size="12">MuJoCo sim</text>
+  </g>
+  <g stroke="#363636" stroke-width="1.5" fill="none" marker-end="url(#a)">
+    <path d="M170 58H228"/><path d="M400 58Q425 58 438 118"/><path d="M170 150H438"/>
+    <path d="M170 242H228"/><path d="M400 242H670V74H688"/>
+    <path d="M545 100V46H688"/><path d="M650 150H688"/><path d="M765 86V120"/>
+    <path d="M765 178V212"/>
+  </g>
+  <text x="775" y="200" font-size="12" fill="#555">v, omega</text>
+</svg>
