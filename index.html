@@ -37,7 +37,8 @@
           <div class="is-size-5 publication-authors">
             <span class="author-block"><a href="#">Yani Hickey Berry</a><sup>1</sup>,</span>
             <span class="author-block"><a href="#">Will Munro</a><sup>1</sup>,</span>
-            <span class="author-block"><a href="#">Pauras Londhe</a><sup>1</sup></span>
+            <span class="author-block"><a href="#">Pauras Londhe</a><sup>1</sup>,</span>
+            <span class="author-block"><a href="#">Mahmoud Abdallah</a><sup>1</sup></span>
           </div>
 
           <div class="is-size-5 publication-authors">
@@ -113,6 +114,7 @@
           <tr><td>Yani Hickey Berry</td><td>Ported the pipeline into MuJoCo: TurtleBot3 model and meshes, room scene, mujoco_backend and simulation bug fixes. Added the head-mounted camera and camera calibration, tuned the EKF noise scales, ran the hardware demo on the real TurtleBot3 via turtlebot_rosbridge, produced the walkthrough videos, and set up the GitHub Pages website and built this project page.</td></tr>
           <tr><td>Will Munro</td><td>Reworked the mobile-robot pipeline into the single-marker docking design: marker-relative dock frame, PnP pose covariance, EKF frame initialisation and Joseph update, LQR progress tracking, planner and LiDAR map changes. Built the hardware track (hardware_mission, real-camera calibration and geometry measurement, hardware runs), wrote the README, and managed the repository.</td></tr>
           <tr><td>Pauras Londhe</td><td>Wrote the initial Track A codebase: unicycle model and Jacobians, EKF, LQR tracker, A* planner, LiDAR occupancy grid, camera model and calibration, mission logic and simulation world. Added the first evaluation, tuning and LQR diagnosis scripts, unit tests and the first demo.</td></tr>
+          <tr><td>Mahmoud Abdallah</td><td>n/a</td></tr>
         </tbody>
       </table>
     </div>
@@ -286,56 +288,110 @@
     <div class="content has-text-justified">
       <p>
         Success is scored independently against simulator ground truth: final position within 5 cm, heading
-        within 5&deg;, and no collision. End-to-end runs of the current single-marker version:
+        within 5&deg;, and no collision. The table below is from the submitted code on 20 held-out scenarios
+        (seeds 1000 to 1019, random start pose and obstacles), with and without a 6 N push applied to the robot at
+        t = 12 s. Reproduce with <code>python evaluate.py mujoco 20</code>.
       </p>
       <table class="table is-fullwidth is-striped" style="text-align:left">
         <thead>
-          <tr><th>Scenario</th><th>Result</th><th>Acquisition</th><th>Total time</th><th>Position error</th><th>Heading error</th><th>Dock-phase RMSE</th><th>Mean NEES</th></tr>
+          <tr><th>Scenario</th><th>n</th><th>Success</th><th>Dock error median / max</th><th>Heading error median</th><th>Mean time</th><th>EKF RMSE</th><th>Odometry-only RMSE</th><th>NEES median</th><th>Collisions</th></tr>
         </thead>
         <tbody>
-          <tr><td>Seed 3, 4 obstacles</td><td>Docked</td><td>17.0 s</td><td>46.5 s</td><td>2.94 cm</td><td>1.23&deg;</td><td>0.547 m</td><td>8.60</td></tr>
-          <tr><td>Held-out seed 1000</td><td>Docked</td><td>16.6 s</td><td>51.3 s</td><td>3.03 cm</td><td>0.58&deg;</td><td>0.196 m</td><td>7.38</td></tr>
-          <tr><td>Seed 3, camera disabled</td><td>marker_not_found</td><td>none</td><td>0.3 s*</td><td>n/a</td><td>n/a</td><td>n/a</td><td>n/a</td></tr>
+          <tr><td>Baseline</td><td>20</td><td>100% (95% CI 84&ndash;100%)</td><td>2.85 / 3.42 cm</td><td>0.57&deg;</td><td>20.0 s</td><td>3.0 cm</td><td>16.5 cm</td><td>1.09</td><td>0</td></tr>
+          <tr><td>6 N push at 12 s</td><td>20</td><td>100% (95% CI 84&ndash;100%)</td><td>2.81 / 3.94 cm</td><td>1.08&deg;</td><td>27.6 s</td><td>5.8 cm</td><td>19.9 cm</td><td>2.49</td><td>0</td></tr>
         </tbody>
       </table>
-      <p class="is-size-7">* Search timeout shortened for this check. It confirms the robot does not fall back to a
-        known dock position when it cannot see the marker.</p>
     </div>
 
     <div class="columns is-centered">
-      <!-- Evaluation. -->
       <div class="column">
         <div class="content">
-          <h2 class="title is-4">Evaluation and ablations</h2>
+          <h2 class="title is-4">Nominal run (seed 3)</h2>
           <p>
-            Docking error over 50 trials, NEES histogram against &chi;<sup>2</sup><sub>3</sub>, and success
-            rate under ablations (noise scaling, gate off, &plusmn;5% focal length error, 30&deg; FOV,
-            &plusmn;5% wheel bias, 7 obstacles). <!-- TEAM: confirm which code version produced this sweep. -->
+            Estimate (red) against ground truth (black) and odometry only (blue), with 2&sigma; ellipses and bounds.
+            The marker is acquired at 2.6 s (green line), which creates the dock frame. The robot docks at 20 s with
+            2.9 cm position error; NEES stays inside the 95% bound for almost the whole run.
           </p>
-          <img src="./static/images/results/evaluation.png"
-            class="teaser-image"
-            alt="Evaluation and ablations."/>
+          <img src="./static/images/results/run_seed3_mujoco.png" class="teaser-image" alt="Seed 3 run."/>
         </div>
       </div>
     </div>
     <div class="columns is-centered">
-      <!-- LQR trade-off. -->
       <div class="column">
         <div class="content">
-          <h2 class="title is-4">LQR trade-off</h2>
+          <h2 class="title is-4">Disturbed run (seed 1003, 6 N push at 12 s)</h2>
           <p>
-            Scaling R from 0.01 to 100 trades control effort against tracking error. Tracking RMSE rises from
-            about 8.2 cm to 12 cm as R increases, and success drops to about 83% at R &times; 100, where corrections
-            are penalised so heavily that the robot drifts off the path. <!-- TEAM: check this explanation. --> R &times; 1 was kept as a balance.
+            The hardest of the 20 push trials. The push is not in the motion model, so the heading estimate is
+            knocked about 35&deg; off while the filter still reports a tight covariance (NEES above 100). With the
+            marker out of view between 22 s and 45 s nothing can correct it. The innovation gate then rejects the
+            first camera fixes as outliers (21 rejected), and the lock-out recovery re-opens the gate (4 times)
+            until the estimate snaps back. The robot still docks at 56 s with 2.6 cm error.
           </p>
-          <img src="./static/images/results/lqr_tradeoff.png"
-            class="teaser-image"
-            alt="LQR trade-off."/>
+          <img src="./static/images/results/run_seed1003_push.png" class="teaser-image" alt="Seed 1003 push run."/>
         </div>
       </div>
     </div>
-    <!-- Add a plot from a successful run here (e.g. regenerate run_seed3_mujoco.png with
-         mjpython main.py --seed 3 and let it finish), showing estimate vs truth with 2-sigma bounds. -->
+
+    <div class="columns is-centered">
+      <div class="column">
+        <div class="content">
+          <h2 class="title is-4">Ablations and LQR trade-off (earlier design iteration)</h2>
+          <p>
+            These two sweeps were run on an earlier version of the pipeline, before the camera and marker geometry
+            were changed, and the full sweep (<code>python evaluate.py</code>, about 470 trials) has not been rerun
+            on the submitted code. They show the trends we used to choose the design, not the final numbers.
+            Docking accuracy over 50 trials, NEES against &chi;<sup>2</sup><sub>3</sub>, and success under
+            ablations (noise scaling, gate off, &plusmn;5% focal length error, narrow FOV, wheel bias, 7 obstacles):
+          </p>
+          <img src="./static/images/results/evaluation.png" class="teaser-image" alt="Evaluation and ablations."/>
+          <p>
+            Scaling the LQR R weight from 0.01 to 100 trades control effort against tracking error: tracking RMSE
+            rises from about 8.2 cm to 12 cm, and success drops to about 83% at R &times; 100. R &times; 1 was kept
+            as the balance point.
+          </p>
+          <img src="./static/images/results/lqr_tradeoff.png" class="teaser-image" alt="LQR trade-off."/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hardware. -->
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">Real hardware</h2>
+        <div class="content has-text-justified">
+          <p>
+            The same pipeline (EKF, planner, LQR and docking logic) runs on a real TurtleBot3 through the UTS-RI
+            <code>turtlebot_rosbridge</code> package (code in <code>track A - hardware/</code>). Below is a full
+            real-robot run: the robot searches for the marker, plans around the obstacles using the LiDAR, and docks
+            in front of the ArUco marker.
+          </p>
+          <div class="has-text-centered" style="margin-bottom:1.5rem">
+            <video id="hardware-video" controls muted playsinline preload="metadata"
+                   style="max-width:360px;width:100%;border-radius:6px">
+              <source src="./static/videos/hardware_run.mp4" type="video/mp4">
+            </video>
+            <p class="is-size-7">Real TurtleBot3 docking run, 2 November 2026 (98 s).</p>
+          </div>
+          <ul>
+            <li><b>Camera calibration:</b> 50 checkerboard views, RMS reprojection error 0.645 px,
+              f<sub>x</sub> = 1170 px, f<sub>y</sub> = 1171 px at 640x480. The simulated camera uses
+              f<sub>x</sub> = 530 px, so the real lens is much narrower.</li>
+            <li><b>Geometry, measured on the robot:</b> 0.10 m marker centred 0.15 m above the floor, camera 0.15 m
+              high and 0.06 m forward, pitched down 3.7&deg;.</li>
+            <li><b>Logged run (103 s):</b> search 0&ndash;11 s, marker confirmed at 11 s, navigation with a LiDAR
+              back-off near an obstacle (39&ndash;47 s), marker reacquired, then visual servoing and final alignment.
+              The log ends in the align phase with the estimate 3.6 cm short of the target and 4.4 cm to the side,
+              heading about 1&deg; off.</li>
+          </ul>
+          <p>
+            Limits: there was no motion capture, so we can only compare the estimate with the target, not true
+            pose error, and we have one logged run rather than a set of trials. Hardware needed extra behaviour
+            that simulation did not (back-off from close obstacles, reacquire and visual servo before final
+            alignment) because real wheel slip and the narrow camera FOV lose the marker more often.
+          </p>
+        </div>
+      </div>
+    </div>
 
     <!-- Discussion. -->
     <div class="columns is-centered">
@@ -343,23 +399,28 @@
         <h2 class="title is-3">Results discussion and reflection</h2>
         <div class="content has-text-justified">
           <p>
-            Both full runs docked within 3.1 cm and 1.3&deg;, inside the 5 cm and 5&deg; success criteria. The
-            dock-phase RMSE is dominated by the first camera fix: a small marker seen from 4 to 5 m gives a noisy
-            and sometimes ambiguous pose, and that error is carried into the dock frame until closer views
-            correct it. Seed 3 went from 0.547 m RMSE over the dock phase to 2.94 cm at the end.
+            <b>Accuracy.</b> All 40 trials docked. The final error clusters tightly between 2.2 and 3.9 cm because
+            the controller stops once the <i>estimate</i> is within 2.5 cm of the target, and the EKF's own error at
+            that point adds to it. Tightening the stop tolerance would cut the final error but lengthen the run.
           </p>
           <p>
-            Mean NEES of 7.4 to 8.6 is above the ideal value of 3, so the filter is overconfident. Likely causes
-            are rasterisation of the marker corners, planar-pose ambiguity at distance, and persistent wheel
-            bias that a three-state filter does not estimate. We did not tune the noise down to make the plots
-            look better; the noise scales are left explicit in <code>src/config.py</code>.
+            <b>Estimation.</b> Fusing the camera cuts position RMSE from 16.5 cm (odometry only, same initial fix)
+            to 3.0 cm. In the nominal case median NEES is 1.09 and 88% of samples sit inside the 95% bound of 7.81,
+            so the filter is consistent to slightly conservative. The camera floors (1.5 cm, 1&deg;) and
+            r_scale = 2 make R larger than the raw corner-noise model, which is why NEES sits below 3.
           </p>
           <p>
-            Limitations: the robot searches by rotating on the spot, so a fully occluded marker is never found
-            and the run times out after 40 s. The scene generator keeps a line of sight to the marker for this
-            reason. These are smoke tests rather than a full statistical study. Future work: estimate wheel bias
-            as extra states, add exploration when the marker is not visible, and run the full evaluation sweep on
-            the final code.
+            <b>Disturbance.</b> The push still docks every time, but costs 7.6 s on average and doubles the RMSE.
+            The cause is in the estimator, not the controller: the push is unmodelled, so Q is too small right after
+            it and the filter is overconfident (per-trial mean NEES 10&ndash;135). The 99% gate then rejects good
+            camera fixes, and recovery depends on the lock-out logic (0.95 lock-out recoveries per trial under push against
+            0.15 nominal). A fix would be to inflate Q when wheel commands and measured motion disagree.
+          </p>
+          <p>
+            <b>Limitations.</b> The robot searches by rotating on the spot, so a fully occluded marker is never found
+            and the run times out after 40 s; the scene generator keeps a line of sight to the marker for this
+            reason. Wheel bias is not estimated. The ablation and LQR sweeps above come from an earlier design
+            iteration and should be rerun on the final code.
           </p>
         </div>
       </div>
@@ -380,6 +441,8 @@
         <tr><td>Claude (Anthropic)</td><td>All members</td><td>Debugging code, suggesting improvements and workarounds for problems we ran into, and suggesting tutorial code that we adapted and integrated into the project.</td></tr>
       </tbody>
     </table>
+    <h2 class="title is-4">Code reuse</h2>
+    <p>The model, EKF and LQR structure started from the 41014 weekly tutorials (Weeks 7 and 8) and were adapted for this platform. The TurtleBot3 meshes and model are from ROBOTIS (see <code>assets/robotis_tb3/LICENSE</code>). Hardware communication uses the UTS-RI <code>turtlebot_rosbridge</code> package.</p>
   </div>
 </section>
 
